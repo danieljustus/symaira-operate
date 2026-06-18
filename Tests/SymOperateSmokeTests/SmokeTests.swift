@@ -89,19 +89,18 @@ final class SmokeTests: XCTestCase {
 
     // MARK: - Wait for
 
-    func testWaitForThrowsWhenConditionNotMet() throws {
-        XCTAssertThrowsError(
-            try controller.waitFor(text: "XYZ_NONEXISTENT_123", app: nil, timeoutSeconds: 1)
-        ) { error in
-            guard let autoError = error as? AutomationError else {
-                XCTFail("Expected AutomationError, got \(type(of: error))")
-                return
-            }
+    func testWaitForThrowsWhenConditionNotMet() async throws {
+        do {
+            _ = try await controller.waitFor(text: "XYZ_NONEXISTENT_123", app: nil, timeoutSeconds: 1)
+            XCTFail("Expected AutomationError to be thrown")
+        } catch let autoError as AutomationError {
             if case .operationFailed = autoError {
                 XCTAssertTrue(autoError.localizedDescription.contains("1 seconds") || autoError.localizedDescription.contains("within"))
             } else {
                 XCTFail("Expected operationFailed, got \(autoError)")
             }
+        } catch {
+            XCTFail("Expected AutomationError, got \(type(of: error))")
         }
     }
 

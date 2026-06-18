@@ -10,20 +10,20 @@ final class MCPServerTests: XCTestCase {
         server = MCPServer()
     }
 
-    func testInitializeReturnsProtocolVersion() throws {
-        let result = try server.dispatch(method: "initialize", params: ["protocolVersion": "2024-11-05"])
+    func testInitializeReturnsProtocolVersion() async throws {
+        let result = try await server.dispatch(method: "initialize", params: ["protocolVersion": "2024-11-05"])
         XCTAssertEqual(result["protocolVersion"] as? String, "2024-11-05")
         let capabilities = result["capabilities"] as? [String: Any]
         XCTAssertNotNil(capabilities?["tools"])
     }
 
-    func testPingReturnsEmptyResult() throws {
-        let result = try server.dispatch(method: "ping", params: [:])
+    func testPingReturnsEmptyResult() async throws {
+        let result = try await server.dispatch(method: "ping", params: [:])
         XCTAssertEqual(result.count, 0)
     }
 
-    func testToolsListReturnsAllTools() throws {
-        let result = try server.dispatch(method: "tools/list", params: [:])
+    func testToolsListReturnsAllTools() async throws {
+        let result = try await server.dispatch(method: "tools/list", params: [:])
         let tools = result["tools"] as? [[String: Any]]
         XCTAssertEqual(tools?.count, 20)
         let names = tools?.compactMap { $0["name"] as? String }
@@ -33,15 +33,20 @@ final class MCPServerTests: XCTestCase {
         XCTAssertTrue(names?.contains("wait_for") ?? false)
     }
 
-    func testUnknownMethodThrows() {
-        XCTAssertThrowsError(try server.dispatch(method: "invalid/method", params: [:])) { error in
-            let message = (error as? AutomationError)?.localizedDescription ?? ""
+    func testUnknownMethodThrows() async {
+        do {
+            _ = try await server.dispatch(method: "invalid/method", params: [:])
+            XCTFail("Expected error to be thrown")
+        } catch let error as AutomationError {
+            let message = error.localizedDescription
             XCTAssertTrue(message.contains("Method not found"))
+        } catch {
+            XCTFail("Unexpected error type: \(type(of: error))")
         }
     }
 
-    func testQueryUISchemaHasMaxDepthAndMaxNodes() throws {
-        let result = try server.dispatch(method: "tools/list", params: [:])
+    func testQueryUISchemaHasMaxDepthAndMaxNodes() async throws {
+        let result = try await server.dispatch(method: "tools/list", params: [:])
         let tools = result["tools"] as? [[String: Any]]
         let queryUI = tools?.first { $0["name"] as? String == "query_ui" }
         XCTAssertNotNil(queryUI)
@@ -52,8 +57,8 @@ final class MCPServerTests: XCTestCase {
         XCTAssertEqual(schema?["type"] as? String, "object")
     }
 
-    func testClickSchemaHasCorrectFields() throws {
-        let result = try server.dispatch(method: "tools/list", params: [:])
+    func testClickSchemaHasCorrectFields() async throws {
+        let result = try await server.dispatch(method: "tools/list", params: [:])
         let tools = result["tools"] as? [[String: Any]]
         let click = tools?.first { $0["name"] as? String == "click" }
         let schema = click?["inputSchema"] as? [String: Any]
@@ -66,8 +71,8 @@ final class MCPServerTests: XCTestCase {
         XCTAssertNotNil(properties?["double_click"])
     }
 
-    func testTypeTextToolRequiresTextArgument() throws {
-        let result = try server.dispatch(method: "tools/list", params: [:])
+    func testTypeTextToolRequiresTextArgument() async throws {
+        let result = try await server.dispatch(method: "tools/list", params: [:])
         let tools = result["tools"] as? [[String: Any]]
         let typeText = tools?.first { $0["name"] as? String == "type_text" }
         let schema = typeText?["inputSchema"] as? [String: Any]
@@ -75,8 +80,8 @@ final class MCPServerTests: XCTestCase {
         XCTAssertEqual(required, ["text"])
     }
 
-    func testToolsCallSnapshotReturnsContent() throws {
-        let result = try server.dispatch(method: "tools/call", params: ["name": "snapshot", "arguments": [:]])
+    func testToolsCallSnapshotReturnsContent() async throws {
+        let result = try await server.dispatch(method: "tools/call", params: ["name": "snapshot", "arguments": [:]])
         let content = result["content"] as? [[String: Any]]
         XCTAssertNotNil(content)
         XCTAssertEqual(content?.first?["type"] as? String, "text")
@@ -84,30 +89,40 @@ final class MCPServerTests: XCTestCase {
         XCTAssertEqual(result["isError"] as? Bool, false)
     }
 
-    func testToolsCallWithMissingNameThrows() {
-        XCTAssertThrowsError(try server.dispatch(method: "tools/call", params: ["arguments": [:]])) { error in
-            let message = (error as? AutomationError)?.localizedDescription ?? ""
+    func testToolsCallWithMissingNameThrows() async {
+        do {
+            _ = try await server.dispatch(method: "tools/call", params: ["arguments": [:]])
+            XCTFail("Expected error to be thrown")
+        } catch let error as AutomationError {
+            let message = error.localizedDescription
             XCTAssertTrue(message.contains("tool name") || message.contains("requires"))
+        } catch {
+            XCTFail("Unexpected error type: \(type(of: error))")
         }
     }
 
-    func testToolsCallWithInvalidToolNameThrows() {
-        XCTAssertThrowsError(try server.dispatch(method: "tools/call", params: ["name": "nonexistent_tool", "arguments": [:]])) { error in
-            let message = (error as? AutomationError)?.localizedDescription ?? ""
+    func testToolsCallWithInvalidToolNameThrows() async {
+        do {
+            _ = try await server.dispatch(method: "tools/call", params: ["name": "nonexistent_tool", "arguments": [:]])
+            XCTFail("Expected error to be thrown")
+        } catch let error as AutomationError {
+            let message = error.localizedDescription
             XCTAssertTrue(message.contains("Unknown tool"))
+        } catch {
+            XCTFail("Unexpected error type: \(type(of: error))")
         }
     }
 
-    func testListDisplaysReturnsDisplays() throws {
-        let result = try server.dispatch(method: "tools/call", params: ["name": "list_displays", "arguments": [:]])
+    func testListDisplaysReturnsDisplays() async throws {
+        let result = try await server.dispatch(method: "tools/call", params: ["name": "list_displays", "arguments": [:]])
         let content = result["content"] as? [[String: Any]]
         XCTAssertNotNil(content)
         let text = content?.first?["text"] as? String ?? ""
         XCTAssertTrue(text.contains("displayID"), "Expected displayID in list_displays output")
     }
 
-    func testListWindowsReturnsWindows() throws {
-        let result = try server.dispatch(method: "tools/call", params: ["name": "list_windows", "arguments": [:]])
+    func testListWindowsReturnsWindows() async throws {
+        let result = try await server.dispatch(method: "tools/call", params: ["name": "list_windows", "arguments": [:]])
         let content = result["content"] as? [[String: Any]]
         XCTAssertNotNil(content)
         XCTAssertEqual(result["isError"] as? Bool, false)
