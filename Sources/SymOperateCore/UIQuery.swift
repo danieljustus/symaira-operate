@@ -1,3 +1,4 @@
+// swiftlint:disable:next cyclomatic_complexity line_length for_where
 import Foundation
 
 public struct UIElementPredicate: Codable, Sendable {
@@ -32,9 +33,7 @@ public struct UIElementPredicate: Codable, Sendable {
         if let subrole, !matchField(node.subrole, pattern: subrole) { return false }
         if let actions {
             let nodeActions = Set(node.actions)
-            for action in actions {
-                if !nodeActions.contains(action) { return false }
-            }
+            for action in actions where !nodeActions.contains(action) { return false }
         }
         return true
     }

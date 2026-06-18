@@ -95,11 +95,9 @@ public final class AccessibilityService {
             current = next
             if index == path.count - 1 {
                 if let title = copyString(current, attribute: kAXTitleAttribute)?.lowercased() {
-                    for keyword in destructiveKeywords {
-                        if title.contains(keyword) {
+                    for keyword in destructiveKeywords where title.contains(keyword) {
                             throw AutomationError.permissionDenied("Refusing to perform a destructive menu action.")
                         }
-                    }
                 }
                 let result = AXUIElementPerformAction(current, kAXPressAction as CFString)
                 guard result == .success else {
@@ -185,10 +183,8 @@ public final class AccessibilityService {
             return false
         }
 
-        for child in children {
-            if searchText(in: child, needle: needle, remainingDepth: remainingDepth - 1, seen: &seen, maxNodes: maxNodes) {
-                return true
-            }
+        for child in children where searchText(in: child, needle: needle, remainingDepth: remainingDepth - 1, seen: &seen, maxNodes: maxNodes) {
+            return true
         }
         return false
     }
