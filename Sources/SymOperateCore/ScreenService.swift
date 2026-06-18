@@ -261,7 +261,7 @@ public final class ScreenService {
             return .zero
         }
 
-        for row in rawList { // swiftlint:disable:this for_where
+        for row in rawList {
             guard let wid = row[kCGWindowNumber as String] as? Int, wid == windowID,
                   let boundsDict = row[kCGWindowBounds as String] as? [String: CGFloat],
                   let x = boundsDict["X"],

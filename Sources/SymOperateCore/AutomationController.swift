@@ -1,4 +1,3 @@
-// swiftlint:disable:next cyclomatic_complexity
 import AppKit
 import CoreGraphics
 import Foundation

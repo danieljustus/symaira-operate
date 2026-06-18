@@ -1,4 +1,3 @@
-// swiftlint:disable:next for_where
 import XCTest
 @testable import SymOperateCore
 

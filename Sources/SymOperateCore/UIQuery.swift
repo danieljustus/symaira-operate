@@ -1,4 +1,3 @@
-// swiftlint:disable:next cyclomatic_complexity line_length for_where
 import Foundation
 
 public struct UIElementPredicate: Codable, Sendable {
