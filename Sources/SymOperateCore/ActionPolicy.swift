@@ -15,7 +15,7 @@ public struct ActionPolicy: Codable, Sendable {
         self.allowedBundleIDs = allowedBundleIDs
     }
 
-    private static let defaultDenyKeywords: Set<String> = [
+    static let defaultDenyKeywords: Set<String> = [
         "delete", "remove", "erase", "clear", "trash",
         "uninstall", "allow", "authorize", "unlock",
         "quit", "terminate", "force quit", "shutdown"

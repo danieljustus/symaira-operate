@@ -1,5 +1,9 @@
 import Foundation
 
+public enum SymOperateVersion {
+    public static let current = "0.1.0"
+}
+
 public struct PointValue: Codable, Sendable, Equatable {
     public let x: Double
     public let y: Double

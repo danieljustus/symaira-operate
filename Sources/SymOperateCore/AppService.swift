@@ -91,12 +91,12 @@ public struct AppService {
         guard let title, !title.isEmpty else { return }
 
         let axApp = AXUIElementCreateApplication(app.processIdentifier)
-        guard let windows = copyChildren(axApp, attribute: kAXWindowsAttribute) else {
+        guard let windows = axCopyElements(axApp, attribute: kAXWindowsAttribute) else {
             throw AutomationError.notFound("The target application has no accessible windows.")
         }
 
         for window in windows {
-            if let windowTitle = copyString(window, attribute: kAXTitleAttribute), windowTitle.localizedCaseInsensitiveContains(title) {
+            if let windowTitle = axCopyString(window, attribute: kAXTitleAttribute), windowTitle.localizedCaseInsensitiveContains(title) {
                 _ = AXUIElementPerformAction(window, kAXRaiseAction as CFString)
                 return
             }
@@ -128,18 +128,4 @@ public struct AppService {
 
         return NSWorkspace.shared.frontmostApplication
     }
-}
-
-private func copyChildren(_ element: AXUIElement, attribute: String) -> [AXUIElement]? {
-    var value: CFTypeRef?
-    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
-    guard result == .success, let array = value as? [AXUIElement] else { return nil }
-    return array
-}
-
-private func copyString(_ element: AXUIElement, attribute: String) -> String? {
-    var value: CFTypeRef?
-    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
-    guard result == .success else { return nil }
-    return value as? String
 }

@@ -5,7 +5,7 @@ public struct UpdateChecker {
     private let repoOwner: String
     private let repoName: String
 
-    public init(currentVersion: String = "0.1.0", repoOwner: String = "danieljustus", repoName: String = "symaira-operate") {
+    public init(currentVersion: String = SymOperateVersion.current, repoOwner: String = "danieljustus", repoName: String = "symaira-operate") {
         self.currentVersion = currentVersion
         self.repoOwner = repoOwner
         self.repoName = repoName

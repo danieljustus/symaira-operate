@@ -6,6 +6,9 @@ public final class MCPServer {
     private let decoder = JSONDecoder()
     private let encoder = JSONEncoder()
 
+    /// Maximum allowed MCP message size (50 MB) to prevent unbounded memory allocation.
+    private static let maxMessageSize = 50 * 1024 * 1024
+
     public init(controller: AutomationController = AutomationController()) {
         self.controller = controller
         encoder.outputFormatting = [.sortedKeys]
@@ -60,7 +63,7 @@ public final class MCPServer {
             ],
             "serverInfo": [
                 "name": "symoperate",
-                "version": "0.1.0",
+                "version": SymOperateVersion.current,
             ],
         ]
     }
@@ -306,6 +309,7 @@ public final class MCPServer {
             )
             payload = try controller.findUI(
                 predicate: predicate,
+                snapshotID: string(arguments["snapshot_id"]),
                 maxDepth: int(arguments["max_depth"], default: 4),
                 maxNodes: int(arguments["max_nodes"], default: 200),
                 displayID: uint32(arguments["display_id"]),
@@ -341,6 +345,13 @@ public final class MCPServer {
             let text = String(data: data, encoding: .utf8)
         else {
             return "\(tool) completed."
+        }
+        // For snapshot responses, skip the text field to avoid double base64 serialization
+        if tool == "snapshot" || tool == "query_ui" || tool == "query_ui_ocr" || tool == "find_ui" {
+            if let dict = payload as? [String: Any],
+               let _ = dict["imageBase64PNG"] {
+                return "\(tool) completed. See structuredContent for full result."
+            }
         }
         return text
     }
@@ -391,6 +402,10 @@ public final class MCPServer {
         let value = lengthLine.split(separator: ":").last?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard let length = Int(value) else {
             throw AutomationError.operationFailed("Invalid Content-Length header.")
+        }
+
+        guard length <= Self.maxMessageSize else {
+            throw AutomationError.operationFailed("MCP message size \(length) exceeds maximum allowed size of \(Self.maxMessageSize) bytes.")
         }
 
         return try readBytes(from: handle, count: length)
