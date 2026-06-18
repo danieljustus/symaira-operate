@@ -36,8 +36,5 @@ let package = Package(
             dependencies: ["SymOperateCore", "SymOperateMCP"]
         ),
     ],
-    // v0.1 ships in Swift 5 language mode; tightening to Swift 6 strict
-    // concurrency (AppKit/ScreenCaptureKit MainActor isolation) is tracked in
-    // docs/roadmap.md.
-    swiftLanguageModes: [.v5]
+    swiftLanguageModes: [.v6]
 )
