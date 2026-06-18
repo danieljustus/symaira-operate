@@ -25,10 +25,11 @@ final class MCPServerTests: XCTestCase {
     func testToolsListReturnsAllTools() throws {
         let result = try server.dispatch(method: "tools/list", params: [:])
         let tools = result["tools"] as? [[String: Any]]
-        XCTAssertEqual(tools?.count, 14)
+        XCTAssertEqual(tools?.count, 15)
         let names = tools?.compactMap { $0["name"] as? String }
         XCTAssertTrue(names?.contains("snapshot") ?? false)
         XCTAssertTrue(names?.contains("click") ?? false)
+        XCTAssertTrue(names?.contains("list_displays") ?? false)
         XCTAssertTrue(names?.contains("wait_for") ?? false)
     }
 
@@ -95,5 +96,13 @@ final class MCPServerTests: XCTestCase {
             let message = (error as? AutomationError)?.localizedDescription ?? ""
             XCTAssertTrue(message.contains("Unknown tool"))
         }
+    }
+
+    func testListDisplaysReturnsDisplays() throws {
+        let result = try server.dispatch(method: "tools/call", params: ["name": "list_displays", "arguments": [:]])
+        let content = result["content"] as? [[String: Any]]
+        XCTAssertNotNil(content)
+        let text = content?.first?["text"] as? String ?? ""
+        XCTAssertTrue(text.contains("displayID"), "Expected displayID in list_displays output")
     }
 }

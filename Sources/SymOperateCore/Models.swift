@@ -38,6 +38,18 @@ public struct RectValue: Codable, Sendable, Equatable {
     }
 }
 
+public struct DisplayInfo: Codable, Sendable {
+    public let displayID: UInt32
+    public let bounds: RectValue
+    public let isMain: Bool
+
+    public init(displayID: UInt32, bounds: RectValue, isMain: Bool) {
+        self.displayID = displayID
+        self.bounds = bounds
+        self.isMain = isMain
+    }
+}
+
 public struct PermissionSnapshot: Codable, Sendable {
     public let accessibilityGranted: Bool
     public let screenRecordingGranted: Bool

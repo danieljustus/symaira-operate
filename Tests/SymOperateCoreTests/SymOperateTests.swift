@@ -26,4 +26,20 @@ final class SymOperateTests: XCTestCase {
         XCTAssertNil(shortcut.keyCode)
         XCTAssertEqual(shortcut.fallbackText, "ß")
     }
+
+    func testListDisplaysReturnsAtLeastOneDisplay() {
+        let service = ScreenService()
+        let displays = service.listDisplays()
+        XCTAssertFalse(displays.isEmpty, "Should enumerate at least one display")
+        XCTAssertTrue(displays.contains { $0.isMain }, "Should identify the main display")
+    }
+
+    func testDisplayInfoCodable() throws {
+        let display = DisplayInfo(displayID: 1, bounds: RectValue(x: 0, y: 0, width: 1920, height: 1080), isMain: true)
+        let data = try JSONEncoder().encode(display)
+        let decoded = try JSONDecoder().decode(DisplayInfo.self, from: data)
+        XCTAssertEqual(decoded.displayID, 1)
+        XCTAssertEqual(decoded.bounds.width, 1920)
+        XCTAssertTrue(decoded.isMain)
+    }
 }

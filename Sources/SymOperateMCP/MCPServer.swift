@@ -67,14 +67,21 @@ public final class MCPServer {
 
     private func tools() -> [[String: Any]] {
         [
-            tool("snapshot", description: "Capture the current main display as PNG plus coordinate transform metadata.", input: [:]),
             tool("list_apps", description: "List currently running GUI apps on macOS.", input: [:]),
             tool("list_windows", description: "List currently visible windows.", input: [:]),
+            tool("list_displays", description: "List all connected displays with bounds and IDs.", input: [:]),
+            tool("snapshot", description: "Capture a display as PNG plus coordinate transform metadata. Omit display_id for the main display.", input: [
+                "type": "object",
+                "properties": [
+                    "display_id": ["type": "integer", "description": "Display ID to capture. Omit for main display."],
+                ],
+            ]),
             tool("query_ui", description: "Capture a screenshot and accessible UI tree for the frontmost app.", input: [
                 "type": "object",
                 "properties": [
                     "max_depth": ["type": "integer", "default": 4],
                     "max_nodes": ["type": "integer", "default": 200],
+                    "display_id": ["type": "integer", "description": "Display ID to capture. Omit for main display."],
                 ],
             ]),
             tool("click", description: "Click by x/y coordinates or by snapshot_id + element_id.", input: [
@@ -169,15 +176,20 @@ public final class MCPServer {
         let payload: Encodable
         switch name {
         case "snapshot":
-            payload = try controller.snapshot()
+            payload = try controller.snapshot(
+                displayID: uint32(arguments["display_id"])
+            )
         case "list_apps":
             payload = controller.listApps()
         case "list_windows":
             payload = controller.listWindows()
+        case "list_displays":
+            payload = controller.listDisplays()
         case "query_ui":
             payload = try controller.queryUI(
                 maxDepth: int(arguments["max_depth"], default: 4),
-                maxNodes: int(arguments["max_nodes"], default: 200)
+                maxNodes: int(arguments["max_nodes"], default: 200),
+                displayID: uint32(arguments["display_id"])
             )
         case "click":
             payload = try controller.click(
@@ -342,6 +354,12 @@ public final class MCPServer {
     private func double(_ value: Any?) -> Double? {
         if let number = value as? NSNumber { return number.doubleValue }
         if let string = value as? String { return Double(string) }
+        return nil
+    }
+
+    private func uint32(_ value: Any?) -> UInt32? {
+        if let number = value as? NSNumber { return number.uint32Value }
+        if let string = value as? String, let val = UInt32(string) { return val }
         return nil
     }
 

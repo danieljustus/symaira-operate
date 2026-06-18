@@ -14,6 +14,35 @@ public final class ScreenService {
         try? fm.createDirectory(at: snapshotDirectory, withIntermediateDirectories: true)
     }
 
+    public func listDisplays() -> [DisplayInfo] {
+        var displayCount: UInt32 = 0
+        guard CGGetActiveDisplayList(0, nil, &displayCount) == .success, displayCount > 0 else {
+            let mainID = CGMainDisplayID()
+            let mainBounds = CGDisplayBounds(mainID)
+            return [DisplayInfo(displayID: mainID, bounds: RectValue(x: mainBounds.origin.x, y: mainBounds.origin.y, width: mainBounds.size.width, height: mainBounds.size.height), isMain: true)]
+        }
+
+        var ids = [CGDirectDisplayID](repeating: 0, count: Int(displayCount))
+        _ = CGGetActiveDisplayList(displayCount, &ids, &displayCount)
+
+        let mainID = CGMainDisplayID()
+        var seen = Set<UInt32>()
+        var displays: [DisplayInfo] = []
+
+        for id in ids {
+            guard !seen.contains(id) else { continue }
+            seen.insert(id)
+            let bounds = CGDisplayBounds(id)
+            displays.append(DisplayInfo(
+                displayID: id,
+                bounds: RectValue(x: bounds.origin.x, y: bounds.origin.y, width: bounds.size.width, height: bounds.size.height),
+                isMain: id == mainID
+            ))
+        }
+
+        return displays
+    }
+
     public func captureMainDisplay(maxDimension: CGFloat = 1280) throws -> Snapshot {
         let id = UUID().uuidString
         let debugPath = snapshotDirectory.appendingPathComponent("\(id).png")
@@ -46,7 +75,39 @@ public final class ScreenService {
         )
     }
 
-    private func captureScreenWithScreenCaptureKit() throws -> (image: CGImage, contentRect: CGRect) {
+    public func captureDisplay(displayID: UInt32, maxDimension: CGFloat = 1280) throws -> Snapshot {
+        let id = UUID().uuidString
+        let debugPath = snapshotDirectory.appendingPathComponent("\(id).png")
+
+        let captureResult = try captureScreenWithScreenCaptureKit(displayID: displayID)
+
+        let displayBounds = CGDisplayBounds(displayID)
+        let scaled = resizeIfNeeded(image: captureResult.image, maxDimension: maxDimension)
+        let png = try pngData(for: scaled)
+
+        try png.write(to: debugPath)
+
+        let imageSize = SizeValue(width: Double(scaled.width), height: Double(scaled.height))
+        let bounds = RectValue(
+            x: displayBounds.origin.x,
+            y: displayBounds.origin.y,
+            width: displayBounds.size.width,
+            height: displayBounds.size.height
+        )
+        let transform = SnapshotTransform(displayID: displayID, displayBounds: bounds, imageSize: imageSize)
+        return Snapshot(
+            id: id,
+            createdAt: DateFormats.iso8601String(from: Date()),
+            imageBase64PNG: png.base64EncodedString(),
+            imageSize: imageSize,
+            displayBounds: bounds,
+            displayID: displayID,
+            debugImagePath: debugPath.path,
+            transform: transform
+        )
+    }
+
+    private func captureScreenWithScreenCaptureKit(displayID: CGDirectDisplayID = CGMainDisplayID()) throws -> (image: CGImage, contentRect: CGRect) {
         let box = SendableBox<CGImage?>(value: nil)
         let rectBox = SendableBox<CGRect?>(value: nil)
         let errorBox = SendableBox<Error?>(value: nil)
@@ -56,8 +117,8 @@ public final class ScreenService {
             do {
                 let content = try await SCShareableContent.current
 
-                guard let display = content.displays.first(where: { $0.displayID == CGMainDisplayID() }) else {
-                    throw AutomationError.operationFailed("Main display not found in ScreenCaptureKit.")
+                guard let display = content.displays.first(where: { $0.displayID == displayID }) else {
+                    throw AutomationError.operationFailed("Display \(displayID) not found in ScreenCaptureKit.")
                 }
 
                 let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
