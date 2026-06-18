@@ -70,10 +70,11 @@ public final class MCPServer {
             tool("list_apps", description: "List currently running GUI apps on macOS.", input: [:]),
             tool("list_windows", description: "List currently visible windows.", input: [:]),
             tool("list_displays", description: "List all connected displays with bounds and IDs.", input: [:]),
-            tool("snapshot", description: "Capture a display as PNG plus coordinate transform metadata. Omit display_id for the main display.", input: [
+            tool("snapshot", description: "Capture a display or window as PNG plus coordinate transform metadata. Omit display_id for the main display, or provide window_id for a specific window.", input: [
                 "type": "object",
                 "properties": [
                     "display_id": ["type": "integer", "description": "Display ID to capture. Omit for main display."],
+                    "window_id": ["type": "integer", "description": "Window ID to capture. When provided, display_id is ignored."],
                 ],
             ]),
             tool("query_ui", description: "Capture a screenshot and accessible UI tree for the frontmost app.", input: [
@@ -82,6 +83,7 @@ public final class MCPServer {
                     "max_depth": ["type": "integer", "default": 4],
                     "max_nodes": ["type": "integer", "default": 200],
                     "display_id": ["type": "integer", "description": "Display ID to capture. Omit for main display."],
+                    "window_id": ["type": "integer", "description": "Window ID to capture. When provided, display_id is ignored."],
                 ],
             ]),
             tool("click", description: "Click by x/y coordinates or by snapshot_id + element_id.", input: [
@@ -177,7 +179,8 @@ public final class MCPServer {
         switch name {
         case "snapshot":
             payload = try controller.snapshot(
-                displayID: uint32(arguments["display_id"])
+                displayID: uint32(arguments["display_id"]),
+                windowID: intOptional(arguments["window_id"])
             )
         case "list_apps":
             payload = controller.listApps()
@@ -189,7 +192,8 @@ public final class MCPServer {
             payload = try controller.queryUI(
                 maxDepth: int(arguments["max_depth"], default: 4),
                 maxNodes: int(arguments["max_nodes"], default: 200),
-                displayID: uint32(arguments["display_id"])
+                displayID: uint32(arguments["display_id"]),
+                windowID: intOptional(arguments["window_id"])
             )
         case "click":
             payload = try controller.click(
@@ -360,6 +364,12 @@ public final class MCPServer {
     private func uint32(_ value: Any?) -> UInt32? {
         if let number = value as? NSNumber { return number.uint32Value }
         if let string = value as? String, let val = UInt32(string) { return val }
+        return nil
+    }
+
+    private func intOptional(_ value: Any?) -> Int? {
+        if let number = value as? NSNumber { return number.intValue }
+        if let string = value as? String, let val = Int(string) { return val }
         return nil
     }
 

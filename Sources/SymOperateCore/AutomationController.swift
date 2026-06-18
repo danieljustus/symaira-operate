@@ -58,15 +58,18 @@ public final class AutomationController {
         screen.listDisplays()
     }
 
-    public func snapshot(displayID: UInt32? = nil) throws -> Snapshot {
+    public func snapshot(displayID: UInt32? = nil, windowID: Int? = nil) throws -> Snapshot {
+        if let windowID {
+            return try screen.captureWindow(windowID: windowID)
+        }
         if let displayID {
             return try screen.captureDisplay(displayID: displayID)
         }
         return try screen.captureMainDisplay()
     }
 
-    public func queryUI(maxDepth: Int = 4, maxNodes: Int = 200, displayID: UInt32? = nil) throws -> UIQueryResult {
-        let snapshot = try self.snapshot(displayID: displayID)
+    public func queryUI(maxDepth: Int = 4, maxNodes: Int = 200, displayID: UInt32? = nil, windowID: Int? = nil) throws -> UIQueryResult {
+        let snapshot = try self.snapshot(displayID: displayID, windowID: windowID)
         let nodes = try accessibility.queryFrontmostUI(snapshotID: snapshot.id, maxDepth: maxDepth, maxNodes: maxNodes)
         return UIQueryResult(snapshot: snapshot, app: apps.frontmostApp(), nodes: nodes)
     }

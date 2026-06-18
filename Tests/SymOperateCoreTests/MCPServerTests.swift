@@ -105,4 +105,11 @@ final class MCPServerTests: XCTestCase {
         let text = content?.first?["text"] as? String ?? ""
         XCTAssertTrue(text.contains("displayID"), "Expected displayID in list_displays output")
     }
+
+    func testListWindowsReturnsWindows() throws {
+        let result = try server.dispatch(method: "tools/call", params: ["name": "list_windows", "arguments": [:]])
+        let content = result["content"] as? [[String: Any]]
+        XCTAssertNotNil(content)
+        XCTAssertEqual(result["isError"] as? Bool, false)
+    }
 }

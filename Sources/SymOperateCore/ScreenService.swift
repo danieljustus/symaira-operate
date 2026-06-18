@@ -107,6 +107,39 @@ public final class ScreenService {
         )
     }
 
+    public func captureWindow(windowID: Int, maxDimension: CGFloat = 1280) throws -> Snapshot {
+        let id = UUID().uuidString
+        let debugPath = snapshotDirectory.appendingPathComponent("\(id).png")
+
+        let captureResult = try captureScreenWithScreenCaptureKit(windowID: windowID)
+
+        let windowBounds = windowBounds(for: windowID)
+        let scaled = resizeIfNeeded(image: captureResult.image, maxDimension: maxDimension)
+        let png = try pngData(for: scaled)
+
+        try png.write(to: debugPath)
+
+        let imageSize = SizeValue(width: Double(scaled.width), height: Double(scaled.height))
+        let bounds = RectValue(
+            x: windowBounds.origin.x,
+            y: windowBounds.origin.y,
+            width: windowBounds.size.width,
+            height: windowBounds.size.height
+        )
+        let displayID = CGMainDisplayID()
+        let transform = SnapshotTransform(displayID: displayID, displayBounds: bounds, imageSize: imageSize)
+        return Snapshot(
+            id: id,
+            createdAt: DateFormats.iso8601String(from: Date()),
+            imageBase64PNG: png.base64EncodedString(),
+            imageSize: imageSize,
+            displayBounds: bounds,
+            displayID: displayID,
+            debugImagePath: debugPath.path,
+            transform: transform
+        )
+    }
+
     private func captureScreenWithScreenCaptureKit(displayID: CGDirectDisplayID = CGMainDisplayID()) throws -> (image: CGImage, contentRect: CGRect) {
         let box = SendableBox<CGImage?>(value: nil)
         let rectBox = SendableBox<CGRect?>(value: nil)
@@ -161,6 +194,85 @@ public final class ScreenService {
         }
 
         return (image, rectBox.value ?? CGRect.zero)
+    }
+
+    private func captureScreenWithScreenCaptureKit(windowID: Int) throws -> (image: CGImage, contentRect: CGRect) {
+        let box = SendableBox<CGImage?>(value: nil)
+        let rectBox = SendableBox<CGRect?>(value: nil)
+        let errorBox = SendableBox<Error?>(value: nil)
+        let semaphore = DispatchSemaphore(value: 0)
+
+        Task { @MainActor in
+            do {
+                let content = try await SCShareableContent.current
+
+                guard let window = content.windows.first(where: { $0.windowID == windowID }) else {
+                    throw AutomationError.notFound("Window \(windowID) not found in ScreenCaptureKit.")
+                }
+
+                guard let display = content.displays.first(where: { $0.displayID == CGMainDisplayID() }) else {
+                    throw AutomationError.operationFailed("Main display not found for window capture.")
+                }
+
+                let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [window])
+                let config = SCStreamConfiguration()
+                config.pixelFormat = kCVPixelFormatType_32BGRA
+                config.showsCursor = false
+
+                let (image, rect) = try await SCScreenshotManager.captureImage(
+                    contentFilter: filter,
+                    configuration: config
+                )
+                box.value = image
+                rectBox.value = rect
+            } catch {
+                errorBox.value = error
+            }
+            semaphore.signal()
+        }
+
+        if Thread.isMainThread {
+            while semaphore.wait(timeout: .now()) == .timedOut {
+                RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
+            }
+        } else {
+            semaphore.wait()
+        }
+
+        if let error = errorBox.value {
+            let nsError = error as NSError
+            if nsError.domain == "com.apple.ScreenCaptureKit" {
+                if nsError.code == -3801 {
+                    throw AutomationError.permissionDenied("Screen Recording permission is denied. Enable it in System Settings > Privacy & Security > Screen Recording.")
+                }
+            }
+            throw AutomationError.operationFailed("Window capture failed: \(error.localizedDescription)")
+        }
+
+        guard let image = box.value else {
+            throw AutomationError.operationFailed("Failed to capture window image.")
+        }
+
+        return (image, rectBox.value ?? CGRect.zero)
+    }
+
+    private func windowBounds(for windowID: Int) -> CGRect {
+        guard let rawList = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] else {
+            return .zero
+        }
+
+        for row in rawList {
+            guard let wid = row[kCGWindowNumber as String] as? Int, wid == windowID,
+                  let boundsDict = row[kCGWindowBounds as String] as? [String: CGFloat],
+                  let x = boundsDict["X"],
+                  let y = boundsDict["Y"],
+                  let width = boundsDict["Width"],
+                  let height = boundsDict["Height"]
+            else { continue }
+            return CGRect(x: x, y: y, width: width, height: height)
+        }
+
+        return .zero
     }
 
     private func resizeIfNeeded(image: CGImage, maxDimension: CGFloat) -> CGImage {
