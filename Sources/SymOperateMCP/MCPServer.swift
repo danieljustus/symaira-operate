@@ -95,6 +95,18 @@ public final class MCPServer {
                     "window_id": ["type": "integer", "description": "Window ID to capture. When provided, display_id is ignored."],
                 ],
             ]),
+            tool("find_ui", description: "Search the current UI tree by role, title, label, value, subrole, or actions. Supports regex patterns (wrap in /slashes/).", input: [
+                "type": "object",
+                "properties": [
+                    "role": ["type": "string"],
+                    "title": ["type": "string"],
+                    "label": ["type": "string"],
+                    "value": ["type": "string"],
+                    "subrole": ["type": "string"],
+                    "actions": ["type": "array", "items": ["type": "string"]],
+                    "snapshot_id": ["type": "string", "description": "Reuse an existing snapshot. If omitted, takes a fresh one."],
+                ],
+            ]),
             tool("click", description: "Click by x/y coordinates or by snapshot_id + element_id.", input: [
                 "type": "object",
                 "properties": [
@@ -282,6 +294,22 @@ public final class MCPServer {
                 for bid in allowBundle { controller.actionPolicy.allowBundleID(bid) }
             }
             payload = controller.actionPolicy
+        case "find_ui":
+            let predicate = UIElementPredicate(
+                role: string(arguments["role"]),
+                title: string(arguments["title"]),
+                label: string(arguments["label"]),
+                value: string(arguments["value"]),
+                subrole: string(arguments["subrole"]),
+                actions: arguments["actions"] as? [String]
+            )
+            payload = try controller.findUI(
+                predicate: predicate,
+                maxDepth: int(arguments["max_depth"], default: 4),
+                maxNodes: int(arguments["max_nodes"], default: 200),
+                displayID: uint32(arguments["display_id"]),
+                windowID: intOptional(arguments["window_id"])
+            )
         default:
             throw AutomationError.notFound("Unknown tool '\(name)'.")
         }

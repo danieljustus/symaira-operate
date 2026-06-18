@@ -86,6 +86,19 @@ public final class AutomationController {
         return count
     }
 
+    public func findUI(
+        predicate: UIElementPredicate,
+        maxDepth: Int = 4,
+        maxNodes: Int = 200,
+        displayID: UInt32? = nil,
+        windowID: Int? = nil
+    ) throws -> UIQueryResult {
+        let queryResult = try queryUI(maxDepth: maxDepth, maxNodes: maxNodes, displayID: displayID, windowID: windowID)
+        let queryService = UIQueryService()
+        let matched = queryService.findNodes(in: queryResult.nodes, predicate: predicate)
+        return UIQueryResult(snapshot: queryResult.snapshot, app: queryResult.app, nodes: matched)
+    }
+
     public func click(
         snapshotID: String? = nil,
         elementID: String? = nil,
