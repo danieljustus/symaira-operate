@@ -9,29 +9,7 @@ public final class AutomationController {
     let accessibility = AccessibilityService()
     private let input = InputService()
     private let ocr = OCRService()
-
-    private struct DestructiveActionPolicy {
-        static let blockedKeywords: Set<String> = [
-            "delete", "remove", "erase", "clear", "trash",
-            "uninstall", "allow", "authorize", "unlock",
-            "quit", "terminate", "force quit", "shutdown"
-        ]
-
-        func isDestructive(role: String?, title: String?, label: String?, value: String?) -> Bool {
-            let keywords = Self.blockedKeywords
-            let inputs = [role, title, label, value].compactMap { $0?.lowercased() }
-            for input in inputs {
-                for keyword in keywords {
-                    if input.contains(keyword) {
-                        return true
-                    }
-                }
-            }
-            return false
-        }
-    }
-
-    private let destructivePolicy = DestructiveActionPolicy()
+    public var actionPolicy = ActionPolicy()
 
     public init() {}
 
@@ -198,7 +176,7 @@ public final class AutomationController {
                     throw AutomationError.permissionDenied("Refusing to target a secure text field.")
                 }
 
-                if destructivePolicy.isDestructive(role: resolved.role, title: resolved.title, label: resolved.label, value: resolved.value) {
+                if actionPolicy.isDestructive(role: resolved.role, title: resolved.title, label: resolved.label, value: resolved.value) {
                     throw AutomationError.permissionDenied("Refusing to target a potentially destructive UI element.")
                 }
 

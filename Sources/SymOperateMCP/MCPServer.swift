@@ -167,6 +167,15 @@ public final class MCPServer {
                 ],
             ]),
             tool("permissions_status", description: "Report screen recording and accessibility permission status.", input: [:]),
+            tool("get_policy", description: "Get the current action policy (deny/allow keywords, allowed bundle IDs).", input: [:]),
+            tool("set_policy", description: "Update the action policy. Extends defaults; cannot weaken the built-in safety guard.", input: [
+                "type": "object",
+                "properties": [
+                    "extra_deny_keywords": ["type": "array", "items": ["type": "string"], "description": "Additional keywords to block."],
+                    "allow_keywords": ["type": "array", "items": ["type": "string"], "description": "Keywords to allow (overrides deny)."],
+                    "allow_bundle_ids": ["type": "array", "items": ["type": "string"], "description": "Bundle IDs to exempt from destructive checks."],
+                ],
+            ]),
         ]
     }
 
@@ -260,6 +269,19 @@ public final class MCPServer {
             )
         case "permissions_status":
             payload = controller.permissionsStatus()
+        case "get_policy":
+            payload = controller.actionPolicy
+        case "set_policy":
+            if let extraDeny = arguments["extra_deny_keywords"] as? [String] {
+                for kw in extraDeny { controller.actionPolicy.addDenyKeyword(kw) }
+            }
+            if let allowKw = arguments["allow_keywords"] as? [String] {
+                for kw in allowKw { controller.actionPolicy.allowKeyword(kw) }
+            }
+            if let allowBundle = arguments["allow_bundle_ids"] as? [String] {
+                for bid in allowBundle { controller.actionPolicy.allowBundleID(bid) }
+            }
+            payload = controller.actionPolicy
         default:
             throw AutomationError.notFound("Unknown tool '\(name)'.")
         }
