@@ -6,6 +6,7 @@ excluded:
 
 disabled_rules:
   - todo
+  - trailing_comma
 
 line_length:
   warning: 200

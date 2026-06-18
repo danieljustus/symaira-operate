@@ -233,7 +233,7 @@ private func copyAttribute(_ element: AXUIElement, attribute: String) -> AnyObje
 
 private func copyElement(_ element: AXUIElement, attribute: String) -> AXUIElement? {
     guard let value = copyAttribute(element, attribute: attribute) else { return nil }
-    return (value as! AXUIElement)
+    return (value as! AXUIElement) // swiftlint:disable:this force_cast
 }
 
 private func copyElements(_ element: AXUIElement, attribute: String) -> [AXUIElement]? {
@@ -256,10 +256,10 @@ private func copyFrame(_ element: AXUIElement) -> RectValue? {
     var size = CGSize.zero
 
     guard
-        AXValueGetType(positionValue as! AXValue) == .cgPoint,
-        AXValueGetValue(positionValue as! AXValue, .cgPoint, &point),
-        AXValueGetType(sizeValue as! AXValue) == .cgSize,
-        AXValueGetValue(sizeValue as! AXValue, .cgSize, &size)
+        AXValueGetType(positionValue as! AXValue) == .cgPoint, // swiftlint:disable:this force_cast
+        AXValueGetValue(positionValue as! AXValue, .cgPoint, &point), // swiftlint:disable:this force_cast
+        AXValueGetType(sizeValue as! AXValue) == .cgSize, // swiftlint:disable:this force_cast
+        AXValueGetValue(sizeValue as! AXValue, .cgSize, &size) // swiftlint:disable:this force_cast
     else {
         return nil
     }

@@ -65,3 +65,4 @@ public struct UpdateChecker {
         return false
     }
 }
+

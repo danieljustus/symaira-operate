@@ -130,7 +130,7 @@ public final class AutomationController {
         return ActionResult(ok: true, message: "Scrolled by (\(deltaX), \(deltaY)).", snapshot: try? screen.captureMainDisplay())
     }
 
-    public func drag(
+    public func drag( // swiftlint:disable:this function_parameter_count
         snapshotID: String? = nil,
         fromElementID: String? = nil,
         toElementID: String? = nil,
