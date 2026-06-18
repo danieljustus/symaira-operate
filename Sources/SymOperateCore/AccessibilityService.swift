@@ -77,15 +77,11 @@ public final class AccessibilityService {
         }
 
         let axApp = AXUIElementCreateApplication(app.processIdentifier)
-        guard let menuBar = copyElement(axApp, attribute: kAXMenuBarAttribute) else {
+        guard let menuBar = axCopyElement(axApp, attribute: kAXMenuBarAttribute) else {
             throw AutomationError.notFound("The frontmost app does not expose an accessible menu bar.")
         }
 
-        let destructiveKeywords: Set<String> = [
-            "delete", "remove", "erase", "clear", "trash",
-            "uninstall", "allow", "authorize", "unlock",
-            "quit", "terminate", "force quit", "shutdown"
-        ]
+        let destructiveKeywords = ActionPolicy.defaultDenyKeywords
 
         var current = menuBar
         for (index, segment) in path.enumerated() {
@@ -94,7 +90,7 @@ public final class AccessibilityService {
             }
             current = next
             if index == path.count - 1 {
-                if let title = copyString(current, attribute: kAXTitleAttribute)?.lowercased() {
+                if let title = axCopyString(current, attribute: kAXTitleAttribute)?.lowercased() {
                     for keyword in destructiveKeywords where title.contains(keyword) {
                             throw AutomationError.permissionDenied("Refusing to perform a destructive menu action.")
                         }
@@ -111,10 +107,10 @@ public final class AccessibilityService {
     }
 
     private func preferredRoots(for axApp: AXUIElement) -> [AXUIElement] {
-        if let focusedWindow = copyElement(axApp, attribute: kAXFocusedWindowAttribute) {
+        if let focusedWindow = axCopyElement(axApp, attribute: kAXFocusedWindowAttribute) {
             return [focusedWindow]
         }
-        if let windows = copyElements(axApp, attribute: kAXWindowsAttribute), !windows.isEmpty {
+        if let windows = axCopyElements(axApp, attribute: kAXWindowsAttribute), !windows.isEmpty {
             return windows
         }
         return [axApp]
@@ -131,19 +127,19 @@ public final class AccessibilityService {
         remainingNodes -= 1
 
         let id = UUID().uuidString
-        let role = copyString(element, attribute: kAXRoleAttribute)
-        let subrole = copyString(element, attribute: kAXSubroleAttribute)
-        let title = copyString(element, attribute: kAXTitleAttribute)
-        let label = copyString(element, attribute: kAXDescriptionAttribute) ?? copyString(element, attribute: kAXIdentifierAttribute)
-        let value = stringify(copyAttribute(element, attribute: kAXValueAttribute))
-        let nodeDescription = copyString(element, attribute: kAXHelpAttribute)
-        let frame = copyFrame(element)
-        let actions = copyActionNames(element)
+        let role = axCopyString(element, attribute: kAXRoleAttribute)
+        let subrole = axCopyString(element, attribute: kAXSubroleAttribute)
+        let title = axCopyString(element, attribute: kAXTitleAttribute)
+        let label = axCopyString(element, attribute: kAXDescriptionAttribute) ?? axCopyString(element, attribute: kAXIdentifierAttribute)
+        let value = axStringify(axCopyAttribute(element, attribute: kAXValueAttribute))
+        let nodeDescription = axCopyString(element, attribute: kAXHelpAttribute)
+        let frame = axCopyFrame(element)
+        let actions = axCopyActionNames(element)
 
         cache[id] = ResolvedElement(element: element, frame: frame, role: role, title: title, label: label, value: value)
 
         let children: [UINode]
-        if depth < maxDepth, let rawChildren = copyElements(element, attribute: kAXChildrenAttribute) {
+        if depth < maxDepth, let rawChildren = axCopyElements(element, attribute: kAXChildrenAttribute) {
             children = rawChildren.compactMap {
                 buildNode(element: $0, depth: depth + 1, maxDepth: maxDepth, remainingNodes: &remainingNodes, cache: &cache)
             }
@@ -169,17 +165,17 @@ public final class AccessibilityService {
         seen += 1
         if seen > maxNodes { return false }
         let haystacks = [
-            copyString(element, attribute: kAXTitleAttribute),
-            copyString(element, attribute: kAXDescriptionAttribute),
-            copyString(element, attribute: kAXHelpAttribute),
-            stringify(copyAttribute(element, attribute: kAXValueAttribute)),
+            axCopyString(element, attribute: kAXTitleAttribute),
+            axCopyString(element, attribute: kAXDescriptionAttribute),
+            axCopyString(element, attribute: kAXHelpAttribute),
+            axStringify(axCopyAttribute(element, attribute: kAXValueAttribute)),
         ].compactMap { $0?.lowercased() }
 
         if haystacks.contains(where: { $0.contains(needle) }) {
             return true
         }
 
-        guard remainingDepth > 0, let children = copyElements(element, attribute: kAXChildrenAttribute) else {
+        guard remainingDepth > 0, let children = axCopyElements(element, attribute: kAXChildrenAttribute) else {
             return false
         }
 
@@ -192,23 +188,23 @@ public final class AccessibilityService {
     private func findMenuChild(parent: AXUIElement, title: String) -> AXUIElement? {
         let normalized = title.lowercased()
 
-        let immediateChildren = (copyElements(parent, attribute: kAXChildrenAttribute) ?? [])
-            + (copyElements(parent, attribute: kAXMenuBarAttribute) ?? [])
-            + (copyElements(parent, attribute: "AXMenu") ?? [])
-            + (copyElements(parent, attribute: kAXContentsAttribute) ?? [])
+        let immediateChildren = (axCopyElements(parent, attribute: kAXChildrenAttribute) ?? [])
+            + (axCopyElements(parent, attribute: kAXMenuBarAttribute) ?? [])
+            + (axCopyElements(parent, attribute: "AXMenu") ?? [])
+            + (axCopyElements(parent, attribute: kAXContentsAttribute) ?? [])
 
         for child in immediateChildren {
             let options = [
-                copyString(child, attribute: kAXTitleAttribute),
-                copyString(child, attribute: kAXDescriptionAttribute),
+                axCopyString(child, attribute: kAXTitleAttribute),
+                axCopyString(child, attribute: kAXDescriptionAttribute),
             ].compactMap { $0?.lowercased() }
             if options.contains(where: { $0 == normalized || $0.contains(normalized) }) {
                 return child
             }
-            if let submenu = copyElement(child, attribute: "AXMenu") {
+            if let submenu = axCopyElement(child, attribute: "AXMenu") {
                 let submenuOptions = [
-                    copyString(submenu, attribute: kAXTitleAttribute),
-                    copyString(submenu, attribute: kAXDescriptionAttribute),
+                    axCopyString(submenu, attribute: kAXTitleAttribute),
+                    axCopyString(submenu, attribute: kAXDescriptionAttribute),
                 ].compactMap { $0?.lowercased() }
                 if submenuOptions.contains(where: { $0 == normalized || $0.contains(normalized) }) {
                     return submenu
@@ -216,67 +212,6 @@ public final class AccessibilityService {
             }
         }
 
-        return nil
-    }
-}
-
-private func copyAttribute(_ element: AXUIElement, attribute: String) -> AnyObject? {
-    var value: CFTypeRef?
-    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
-    guard result == .success, let value else { return nil }
-    return value
-}
-
-private func copyElement(_ element: AXUIElement, attribute: String) -> AXUIElement? {
-    guard let value = copyAttribute(element, attribute: attribute) else { return nil }
-    return (value as! AXUIElement)
-}
-
-private func copyElements(_ element: AXUIElement, attribute: String) -> [AXUIElement]? {
-    copyAttribute(element, attribute: attribute) as? [AXUIElement]
-}
-
-private func copyString(_ element: AXUIElement, attribute: String) -> String? {
-    copyAttribute(element, attribute: attribute) as? String
-}
-
-private func copyFrame(_ element: AXUIElement) -> RectValue? {
-    guard
-        let positionValue = copyAttribute(element, attribute: kAXPositionAttribute),
-        let sizeValue = copyAttribute(element, attribute: kAXSizeAttribute)
-    else {
-        return nil
-    }
-
-    var point = CGPoint.zero
-    var size = CGSize.zero
-
-    guard
-        AXValueGetType(positionValue as! AXValue) == .cgPoint,
-        AXValueGetValue(positionValue as! AXValue, .cgPoint, &point),
-        AXValueGetType(sizeValue as! AXValue) == .cgSize,
-        AXValueGetValue(sizeValue as! AXValue, .cgSize, &size)
-    else {
-        return nil
-    }
-
-    return RectValue(x: point.x, y: point.y, width: size.width, height: size.height)
-}
-
-private func copyActionNames(_ element: AXUIElement) -> [String] {
-    var names: CFArray?
-    let result = AXUIElementCopyActionNames(element, &names)
-    guard result == .success, let array = names as? [String] else { return [] }
-    return array
-}
-
-private func stringify(_ value: AnyObject?) -> String? {
-    switch value {
-    case let string as String:
-        return string
-    case let number as NSNumber:
-        return number.stringValue
-    default:
         return nil
     }
 }

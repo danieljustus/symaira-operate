@@ -12,6 +12,19 @@ public final class ScreenService {
     public init(snapshotDirectory: URL = FileManager.default.temporaryDirectory.appendingPathComponent("symoperate-snapshots", isDirectory: true)) {
         self.snapshotDirectory = snapshotDirectory
         try? fm.createDirectory(at: snapshotDirectory, withIntermediateDirectories: true)
+        cleanupOldSnapshots()
+    }
+
+    /// Deletes snapshot PNGs older than 30 minutes to prevent unbounded disk accumulation.
+    private func cleanupOldSnapshots() {
+        let cutoff = Date().addingTimeInterval(-1800) // 30 minutes
+        guard let files = try? fm.contentsOfDirectory(at: snapshotDirectory, includingPropertiesForKeys: [.creationDateKey]) else { return }
+        for file in files where file.pathExtension == "png" {
+            guard let attrs = try? fm.attributesOfItem(atPath: file.path),
+                  let created = attrs[.creationDate] as? Date,
+                  created < cutoff else { continue }
+            try? fm.removeItem(at: file)
+        }
     }
 
     public func listDisplays() -> [DisplayInfo] {
@@ -44,96 +57,66 @@ public final class ScreenService {
     }
 
     public func captureMainDisplay(maxDimension: CGFloat = 1280) throws -> Snapshot {
-        let id = UUID().uuidString
-        let debugPath = snapshotDirectory.appendingPathComponent("\(id).png")
-
-        let captureResult = try captureScreenWithScreenCaptureKit()
-
-        let displayBounds = CGDisplayBounds(CGMainDisplayID())
-        let scaled = resizeIfNeeded(image: captureResult.image, maxDimension: maxDimension)
-        let png = try pngData(for: scaled)
-
-        try png.write(to: debugPath)
-
-        let imageSize = SizeValue(width: Double(scaled.width), height: Double(scaled.height))
-        let bounds = RectValue(
-            x: displayBounds.origin.x,
-            y: displayBounds.origin.y,
-            width: displayBounds.size.width,
-            height: displayBounds.size.height
-        )
-        let transform = SnapshotTransform(displayID: CGMainDisplayID(), displayBounds: bounds, imageSize: imageSize)
-        return Snapshot(
-            id: id,
-            createdAt: DateFormats.iso8601String(from: Date()),
-            imageBase64PNG: png.base64EncodedString(),
-            imageSize: imageSize,
-            displayBounds: bounds,
+        try capture(
             displayID: CGMainDisplayID(),
-            debugImagePath: debugPath.path,
-            transform: transform
+            bounds: CGDisplayBounds(CGMainDisplayID()),
+            maxDimension: maxDimension
         )
     }
 
     public func captureDisplay(displayID: UInt32, maxDimension: CGFloat = 1280) throws -> Snapshot {
-        let id = UUID().uuidString
-        let debugPath = snapshotDirectory.appendingPathComponent("\(id).png")
-
-        let captureResult = try captureScreenWithScreenCaptureKit(displayID: displayID)
-
-        let displayBounds = CGDisplayBounds(displayID)
-        let scaled = resizeIfNeeded(image: captureResult.image, maxDimension: maxDimension)
-        let png = try pngData(for: scaled)
-
-        try png.write(to: debugPath)
-
-        let imageSize = SizeValue(width: Double(scaled.width), height: Double(scaled.height))
-        let bounds = RectValue(
-            x: displayBounds.origin.x,
-            y: displayBounds.origin.y,
-            width: displayBounds.size.width,
-            height: displayBounds.size.height
-        )
-        let transform = SnapshotTransform(displayID: displayID, displayBounds: bounds, imageSize: imageSize)
-        return Snapshot(
-            id: id,
-            createdAt: DateFormats.iso8601String(from: Date()),
-            imageBase64PNG: png.base64EncodedString(),
-            imageSize: imageSize,
-            displayBounds: bounds,
+        try capture(
             displayID: displayID,
-            debugImagePath: debugPath.path,
-            transform: transform
+            bounds: CGDisplayBounds(displayID),
+            maxDimension: maxDimension
         )
     }
 
     public func captureWindow(windowID: Int, maxDimension: CGFloat = 1280) throws -> Snapshot {
+        let windowBoundsRect = windowBounds(for: windowID)
+        let displayID = CGMainDisplayID()
+        return try capture(
+            displayID: displayID,
+            bounds: windowBoundsRect,
+            maxDimension: maxDimension,
+            windowID: windowID
+        )
+    }
+
+    private func capture(
+        displayID: CGDirectDisplayID,
+        bounds: CGRect,
+        maxDimension: CGFloat,
+        windowID: Int? = nil
+    ) throws -> Snapshot {
         let id = UUID().uuidString
         let debugPath = snapshotDirectory.appendingPathComponent("\(id).png")
 
-        let captureResult = try captureScreenWithScreenCaptureKit(windowID: windowID)
+        let captureResult: (image: CGImage, contentRect: CGRect)
+        if let windowID {
+            captureResult = try captureScreenWithScreenCaptureKit(windowID: windowID)
+        } else {
+            captureResult = try captureScreenWithScreenCaptureKit(displayID: displayID)
+        }
 
-        let windowBounds = windowBounds(for: windowID)
         let scaled = resizeIfNeeded(image: captureResult.image, maxDimension: maxDimension)
         let png = try pngData(for: scaled)
-
         try png.write(to: debugPath)
 
         let imageSize = SizeValue(width: Double(scaled.width), height: Double(scaled.height))
-        let bounds = RectValue(
-            x: windowBounds.origin.x,
-            y: windowBounds.origin.y,
-            width: windowBounds.size.width,
-            height: windowBounds.size.height
+        let rectValue = RectValue(
+            x: bounds.origin.x,
+            y: bounds.origin.y,
+            width: bounds.size.width,
+            height: bounds.size.height
         )
-        let displayID = CGMainDisplayID()
-        let transform = SnapshotTransform(displayID: displayID, displayBounds: bounds, imageSize: imageSize)
+        let transform = SnapshotTransform(displayID: displayID, displayBounds: rectValue, imageSize: imageSize)
         return Snapshot(
             id: id,
             createdAt: DateFormats.iso8601String(from: Date()),
             imageBase64PNG: png.base64EncodedString(),
             imageSize: imageSize,
-            displayBounds: bounds,
+            displayBounds: rectValue,
             displayID: displayID,
             debugImagePath: debugPath.path,
             transform: transform

@@ -37,13 +37,38 @@ public struct UIElementPredicate: Codable, Sendable {
         return true
     }
 
+    /// Maximum regex pattern length to prevent catastrophic backtracking (ReDoS).
+    private static let maxRegexPatternLength = 200
+
     private func matchField(_ field: String?, pattern: String) -> Bool {
         guard let field else { return false }
         if pattern.hasPrefix("/") && pattern.hasSuffix("/") {
             let regex = String(pattern.dropFirst().dropLast())
+            guard !regex.isEmpty,
+                  regex.count <= Self.maxRegexPatternLength,
+                  Self.isSafeRegex(regex)
+            else {
+                // Fallback to literal substring match for invalid/unsafe patterns
+                return field.localizedCaseInsensitiveContains(regex)
+            }
             return field.range(of: regex, options: .regularExpression) != nil
         }
         return field.localizedCaseInsensitiveContains(pattern)
+    }
+
+    /// Rejects patterns with nested quantifiers (e.g., `(a+)+`) that cause ReDoS.
+    private static func isSafeRegex(_ pattern: String) -> Bool {
+        // Check for nested quantifiers: quantifier inside a group followed by another quantifier
+        let nestedQuantifierPattern = #"(\([^)]*[+*][^)]*\))[+*?{]"#
+        if pattern.range(of: nestedQuantifierPattern, options: .regularExpression) != nil {
+            return false
+        }
+        // Check for backreferences or alternation with quantifiers
+        let backreferencePattern = #"\\[1-9]"#
+        if pattern.range(of: backreferencePattern, options: .regularExpression) != nil {
+            return false
+        }
+        return true
     }
 }
 

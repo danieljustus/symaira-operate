@@ -11,11 +11,11 @@
 
 ## v0.2 — robustness
 
-- [ ] Multi-display selection (currently main display only).
-- [ ] Window-scoped capture.
-- [ ] OCR fallback for apps with weak Accessibility metadata.
-- [ ] Stronger, configurable action-policy checks (allow/deny lists).
-- [ ] Richer UI targeting (roles, predicates).
+- [x] Multi-display selection (currently main display only).
+- [x] Window-scoped capture.
+- [x] OCR fallback for apps with weak Accessibility metadata.
+- [x] Stronger, configurable action-policy checks (allow/deny lists).
+- [x] Richer UI targeting (roles, predicates).
 
 ## v0.3 — ecosystem alignment
 
@@ -29,6 +29,6 @@
 
 - [ ] Notarized DMG + Homebrew cask in `../homebrew-tap` (mirror symaira-terminal).
 - [ ] CI on macOS runner (build + test); SwiftLint gate.
-- [ ] Tighten to Swift 6 strict concurrency (AppKit/ScreenCaptureKit MainActor
+- [x] Tighten to Swift 6 strict concurrency (AppKit/ScreenCaptureKit MainActor
       isolation; currently Swift 5 language mode).
 - [ ] Update checker (GitHub releases), ecosystem convention.

@@ -6,6 +6,9 @@ public final class MCPServer {
     private let decoder = JSONDecoder()
     private let encoder = JSONEncoder()
 
+    /// Maximum allowed MCP message size (50 MB) to prevent unbounded memory allocation.
+    private static let maxMessageSize = 50 * 1024 * 1024
+
     public init(controller: AutomationController = AutomationController()) {
         self.controller = controller
         encoder.outputFormatting = [.sortedKeys]
@@ -60,7 +63,7 @@ public final class MCPServer {
             ],
             "serverInfo": [
                 "name": "symoperate",
-                "version": "0.1.0",
+                "version": SymOperateVersion.current,
             ],
         ]
     }
@@ -306,6 +309,7 @@ public final class MCPServer {
             )
             payload = try controller.findUI(
                 predicate: predicate,
+                snapshotID: string(arguments["snapshot_id"]),
                 maxDepth: int(arguments["max_depth"], default: 4),
                 maxNodes: int(arguments["max_nodes"], default: 200),
                 displayID: uint32(arguments["display_id"]),
@@ -341,6 +345,13 @@ public final class MCPServer {
             let text = String(data: data, encoding: .utf8)
         else {
             return "\(tool) completed."
+        }
+        // For snapshot responses, skip the text field to avoid double base64 serialization
+        if tool == "snapshot" || tool == "query_ui" || tool == "query_ui_ocr" || tool == "find_ui" {
+            if let dict = payload as? [String: Any],
+               dict["imageBase64PNG"] != nil {
+                return "\(tool) completed. See structuredContent for full result."
+            }
         }
         return text
     }
@@ -393,6 +404,10 @@ public final class MCPServer {
             throw AutomationError.operationFailed("Invalid Content-Length header.")
         }
 
+        guard length <= Self.maxMessageSize else {
+            throw AutomationError.operationFailed("MCP message size \(length) exceeds maximum allowed size of \(Self.maxMessageSize) bytes.")
+        }
+
         return try readBytes(from: handle, count: length)
     }
 
@@ -421,38 +436,30 @@ public final class MCPServer {
         return data
     }
 
-    private func string(_ value: Any?) -> String? {
-        value as? String
-    }
+    private func string(_ value: Any?) -> String? { value as? String }
 
     private func double(_ value: Any?) -> Double? {
-        if let number = value as? NSNumber { return number.doubleValue }
-        if let string = value as? String { return Double(string) }
-        return nil
+        if let n = value as? NSNumber { return n.doubleValue }
+        return (value as? String).flatMap(Double.init)
     }
 
     private func uint32(_ value: Any?) -> UInt32? {
-        if let number = value as? NSNumber { return number.uint32Value }
-        if let string = value as? String, let val = UInt32(string) { return val }
-        return nil
+        if let n = value as? NSNumber { return n.uint32Value }
+        return (value as? String).flatMap(UInt32.init)
     }
 
     private func intOptional(_ value: Any?) -> Int? {
-        if let number = value as? NSNumber { return number.intValue }
-        if let string = value as? String, let val = Int(string) { return val }
-        return nil
+        if let n = value as? NSNumber { return n.intValue }
+        return (value as? String).flatMap(Int.init)
     }
 
     private func int(_ value: Any?, default defaultValue: Int) -> Int {
-        if let number = value as? NSNumber { return number.intValue }
-        if let string = value as? String, let int = Int(string) { return int }
-        return defaultValue
+        intOptional(value) ?? defaultValue
     }
 
     private func bool(_ value: Any?, default defaultValue: Bool) -> Bool {
-        if let bool = value as? Bool { return bool }
-        if let number = value as? NSNumber { return number.boolValue }
-        return defaultValue
+        if let b = value as? Bool { return b }
+        return (value as? NSNumber)?.boolValue ?? defaultValue
     }
 
     private func requireString(_ value: Any?, name: String) throws -> String {

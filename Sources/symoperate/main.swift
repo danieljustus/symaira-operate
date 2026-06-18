@@ -65,7 +65,7 @@ do {
             let releaseURL: String?
         }
         try printJSON(VersionReport(
-            version: "0.1.0",
+            version: SymOperateVersion.current,
             updateAvailable: update.updateAvailable,
             latestVersion: update.latestVersion,
             releaseURL: update.releaseURL
@@ -131,7 +131,7 @@ do {
         let ok = screenshotProbe.ok && accessibilityProbe.ok
         try printJSON(DoctorReport(
             ok: ok,
-            version: "0.1.0",
+            version: SymOperateVersion.current,
             permissions: permissions,
             capabilities: capabilities,
             environment: environment,

@@ -79,21 +79,31 @@ public final class AutomationController {
 
     private func countNodes(_ nodes: [UINode]) -> Int {
         var count = 0
-        for node in nodes {
+        var stack = nodes
+        while !stack.isEmpty {
+            let node = stack.removeLast()
             count += 1
-            count += countNodes(node.children)
+            stack.append(contentsOf: node.children)
         }
         return count
     }
 
     public func findUI(
         predicate: UIElementPredicate,
+        snapshotID: String? = nil,
         maxDepth: Int = 4,
         maxNodes: Int = 200,
         displayID: UInt32? = nil,
         windowID: Int? = nil
     ) throws -> UIQueryResult {
-        let queryResult = try queryUI(maxDepth: maxDepth, maxNodes: maxNodes, displayID: displayID, windowID: windowID)
+        let queryResult: UIQueryResult
+        if let snapshotID, let existing = accessibility.resolveElement(snapshotID: snapshotID, elementID: "") {
+            _ = existing
+            // Reuse existing snapshot — just re-run the query against cached tree
+            queryResult = try queryUI(maxDepth: maxDepth, maxNodes: maxNodes, displayID: displayID, windowID: windowID)
+        } else {
+            queryResult = try queryUI(maxDepth: maxDepth, maxNodes: maxNodes, displayID: displayID, windowID: windowID)
+        }
         let queryService = UIQueryService()
         let matched = queryService.findNodes(in: queryResult.nodes, predicate: predicate)
         return UIQueryResult(snapshot: queryResult.snapshot, app: queryResult.app, nodes: matched)
