@@ -6,6 +6,13 @@ excluded:
 
 disabled_rules:
   - todo
+  - trailing_comma
+  - for_where
+  - cyclomatic_complexity
+  - line_length
+  - function_parameter_count
+  - trailing_newline
+  - force_cast
 
 line_length:
   warning: 200

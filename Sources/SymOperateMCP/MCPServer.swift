@@ -67,14 +67,44 @@ public final class MCPServer {
 
     private func tools() -> [[String: Any]] {
         [
-            tool("snapshot", description: "Capture the current main display as PNG plus coordinate transform metadata.", input: [:]),
             tool("list_apps", description: "List currently running GUI apps on macOS.", input: [:]),
             tool("list_windows", description: "List currently visible windows.", input: [:]),
+            tool("list_displays", description: "List all connected displays with bounds and IDs.", input: [:]),
+            tool("snapshot", description: "Capture a display or window as PNG plus coordinate transform metadata. Omit display_id for the main display, or provide window_id for a specific window.", input: [
+                "type": "object",
+                "properties": [
+                    "display_id": ["type": "integer", "description": "Display ID to capture. Omit for main display."],
+                    "window_id": ["type": "integer", "description": "Window ID to capture. When provided, display_id is ignored."],
+                ],
+            ]),
             tool("query_ui", description: "Capture a screenshot and accessible UI tree for the frontmost app.", input: [
                 "type": "object",
                 "properties": [
                     "max_depth": ["type": "integer", "default": 4],
                     "max_nodes": ["type": "integer", "default": 200],
+                    "display_id": ["type": "integer", "description": "Display ID to capture. Omit for main display."],
+                    "window_id": ["type": "integer", "description": "Window ID to capture. When provided, display_id is ignored."],
+                ],
+            ]),
+            tool("query_ui_ocr", description: "Like query_ui but falls back to Vision OCR when the Accessibility tree is weak. Returns OCR text regions with coordinates.", input: [
+                "type": "object",
+                "properties": [
+                    "max_depth": ["type": "integer", "default": 4],
+                    "max_nodes": ["type": "integer", "default": 200],
+                    "display_id": ["type": "integer", "description": "Display ID to capture. Omit for main display."],
+                    "window_id": ["type": "integer", "description": "Window ID to capture. When provided, display_id is ignored."],
+                ],
+            ]),
+            tool("find_ui", description: "Search the current UI tree by role, title, label, value, subrole, or actions. Supports regex patterns (wrap in /slashes/).", input: [
+                "type": "object",
+                "properties": [
+                    "role": ["type": "string"],
+                    "title": ["type": "string"],
+                    "label": ["type": "string"],
+                    "value": ["type": "string"],
+                    "subrole": ["type": "string"],
+                    "actions": ["type": "array", "items": ["type": "string"]],
+                    "snapshot_id": ["type": "string", "description": "Reuse an existing snapshot. If omitted, takes a fresh one."],
                 ],
             ]),
             tool("click", description: "Click by x/y coordinates or by snapshot_id + element_id.", input: [
@@ -149,6 +179,16 @@ public final class MCPServer {
                 ],
             ]),
             tool("permissions_status", description: "Report screen recording and accessibility permission status.", input: [:]),
+            tool("get_policy", description: "Get the current action policy (deny/allow keywords, allowed bundle IDs).", input: [:]),
+            tool("set_policy", description: "Update the action policy. Extends defaults; cannot weaken the built-in safety guard.", input: [
+                "type": "object",
+                "properties": [
+                    "extra_deny_keywords": ["type": "array", "items": ["type": "string"], "description": "Additional keywords to block."],
+                    "allow_keywords": ["type": "array", "items": ["type": "string"], "description": "Keywords to allow (overrides deny)."],
+                    "allow_bundle_ids": ["type": "array", "items": ["type": "string"], "description": "Bundle IDs to exempt from destructive checks."],
+                ],
+            ]),
+            tool("version", description: "Print current version and check for updates from GitHub releases.", input: [:]),
         ]
     }
 
@@ -169,15 +209,29 @@ public final class MCPServer {
         let payload: Encodable
         switch name {
         case "snapshot":
-            payload = try controller.snapshot()
+            payload = try controller.snapshot(
+                displayID: uint32(arguments["display_id"]),
+                windowID: intOptional(arguments["window_id"])
+            )
         case "list_apps":
             payload = controller.listApps()
         case "list_windows":
             payload = controller.listWindows()
+        case "list_displays":
+            payload = controller.listDisplays()
         case "query_ui":
             payload = try controller.queryUI(
                 maxDepth: int(arguments["max_depth"], default: 4),
-                maxNodes: int(arguments["max_nodes"], default: 200)
+                maxNodes: int(arguments["max_nodes"], default: 200),
+                displayID: uint32(arguments["display_id"]),
+                windowID: intOptional(arguments["window_id"])
+            )
+        case "query_ui_ocr":
+            payload = try controller.queryUIWithOCR(
+                maxDepth: int(arguments["max_depth"], default: 4),
+                maxNodes: int(arguments["max_nodes"], default: 200),
+                displayID: uint32(arguments["display_id"]),
+                windowID: intOptional(arguments["window_id"])
             )
         case "click":
             payload = try controller.click(
@@ -228,6 +282,38 @@ public final class MCPServer {
             )
         case "permissions_status":
             payload = controller.permissionsStatus()
+        case "get_policy":
+            payload = controller.actionPolicy
+        case "set_policy":
+            if let extraDeny = arguments["extra_deny_keywords"] as? [String] {
+                for kw in extraDeny { controller.actionPolicy.addDenyKeyword(kw) }
+            }
+            if let allowKw = arguments["allow_keywords"] as? [String] {
+                for kw in allowKw { controller.actionPolicy.allowKeyword(kw) }
+            }
+            if let allowBundle = arguments["allow_bundle_ids"] as? [String] {
+                for bid in allowBundle { controller.actionPolicy.allowBundleID(bid) }
+            }
+            payload = controller.actionPolicy
+        case "find_ui":
+            let predicate = UIElementPredicate(
+                role: string(arguments["role"]),
+                title: string(arguments["title"]),
+                label: string(arguments["label"]),
+                value: string(arguments["value"]),
+                subrole: string(arguments["subrole"]),
+                actions: arguments["actions"] as? [String]
+            )
+            payload = try controller.findUI(
+                predicate: predicate,
+                maxDepth: int(arguments["max_depth"], default: 4),
+                maxNodes: int(arguments["max_nodes"], default: 200),
+                displayID: uint32(arguments["display_id"]),
+                windowID: intOptional(arguments["window_id"])
+            )
+        case "version":
+            let checker = UpdateChecker()
+            payload = checker.checkForUpdate()
         default:
             throw AutomationError.notFound("Unknown tool '\(name)'.")
         }
@@ -342,6 +428,18 @@ public final class MCPServer {
     private func double(_ value: Any?) -> Double? {
         if let number = value as? NSNumber { return number.doubleValue }
         if let string = value as? String { return Double(string) }
+        return nil
+    }
+
+    private func uint32(_ value: Any?) -> UInt32? {
+        if let number = value as? NSNumber { return number.uint32Value }
+        if let string = value as? String, let val = UInt32(string) { return val }
+        return nil
+    }
+
+    private func intOptional(_ value: Any?) -> Int? {
+        if let number = value as? NSNumber { return number.intValue }
+        if let string = value as? String, let val = Int(string) { return val }
         return nil
     }
 

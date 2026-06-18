@@ -1,3 +1,5 @@
+import AppKit
+import CoreGraphics
 import Foundation
 
 public final class AutomationController {
@@ -6,29 +8,8 @@ public final class AutomationController {
     private let apps = AppService()
     let accessibility = AccessibilityService()
     private let input = InputService()
-
-    private struct DestructiveActionPolicy {
-        static let blockedKeywords: Set<String> = [
-            "delete", "remove", "erase", "clear", "trash",
-            "uninstall", "allow", "authorize", "unlock",
-            "quit", "terminate", "force quit", "shutdown"
-        ]
-
-        func isDestructive(role: String?, title: String?, label: String?, value: String?) -> Bool {
-            let keywords = Self.blockedKeywords
-            let inputs = [role, title, label, value].compactMap { $0?.lowercased() }
-            for input in inputs {
-                for keyword in keywords {
-                    if input.contains(keyword) {
-                        return true
-                    }
-                }
-            }
-            return false
-        }
-    }
-
-    private let destructivePolicy = DestructiveActionPolicy()
+    private let ocr = OCRService()
+    public var actionPolicy = ActionPolicy()
 
     public init() {}
 
@@ -54,14 +35,68 @@ public final class AutomationController {
         apps.listWindows()
     }
 
-    public func snapshot() throws -> Snapshot {
-        try screen.captureMainDisplay()
+    public func listDisplays() -> [DisplayInfo] {
+        screen.listDisplays()
     }
 
-    public func queryUI(maxDepth: Int = 4, maxNodes: Int = 200) throws -> UIQueryResult {
-        let snapshot = try screen.captureMainDisplay()
+    public func snapshot(displayID: UInt32? = nil, windowID: Int? = nil) throws -> Snapshot {
+        if let windowID {
+            return try screen.captureWindow(windowID: windowID)
+        }
+        if let displayID {
+            return try screen.captureDisplay(displayID: displayID)
+        }
+        return try screen.captureMainDisplay()
+    }
+
+    public func queryUI(maxDepth: Int = 4, maxNodes: Int = 200, displayID: UInt32? = nil, windowID: Int? = nil) throws -> UIQueryResult {
+        let snapshot = try self.snapshot(displayID: displayID, windowID: windowID)
         let nodes = try accessibility.queryFrontmostUI(snapshotID: snapshot.id, maxDepth: maxDepth, maxNodes: maxNodes)
         return UIQueryResult(snapshot: snapshot, app: apps.frontmostApp(), nodes: nodes)
+    }
+
+    public func queryUIWithOCR(maxDepth: Int = 4, maxNodes: Int = 200, displayID: UInt32? = nil, windowID: Int? = nil) throws -> UIQueryResultWithOCR {
+        let snapshot = try self.snapshot(displayID: displayID, windowID: windowID)
+        let nodes = try accessibility.queryFrontmostUI(snapshotID: snapshot.id, maxDepth: maxDepth, maxNodes: maxNodes)
+        let isWeak = ocr.isAXTreeWeak(nodeCount: countNodes(nodes))
+
+        var ocrResult: OCRResult?
+        if isWeak, let imageData = Data(base64Encoded: snapshot.imageBase64PNG) {
+            if let bitmapRep = NSBitmapImageRep(data: imageData),
+               let cgImage = bitmapRep.cgImage {
+                ocrResult = ocr.recognizeText(in: cgImage)
+            }
+        }
+
+        return UIQueryResultWithOCR(
+            snapshot: snapshot,
+            app: apps.frontmostApp(),
+            nodes: nodes,
+            ocrResult: ocrResult,
+            axTreeWeak: isWeak
+        )
+    }
+
+    private func countNodes(_ nodes: [UINode]) -> Int {
+        var count = 0
+        for node in nodes {
+            count += 1
+            count += countNodes(node.children)
+        }
+        return count
+    }
+
+    public func findUI(
+        predicate: UIElementPredicate,
+        maxDepth: Int = 4,
+        maxNodes: Int = 200,
+        displayID: UInt32? = nil,
+        windowID: Int? = nil
+    ) throws -> UIQueryResult {
+        let queryResult = try queryUI(maxDepth: maxDepth, maxNodes: maxNodes, displayID: displayID, windowID: windowID)
+        let queryService = UIQueryService()
+        let matched = queryService.findNodes(in: queryResult.nodes, predicate: predicate)
+        return UIQueryResult(snapshot: queryResult.snapshot, app: queryResult.app, nodes: matched)
     }
 
     public func click(
@@ -154,7 +189,7 @@ public final class AutomationController {
                     throw AutomationError.permissionDenied("Refusing to target a secure text field.")
                 }
 
-                if destructivePolicy.isDestructive(role: resolved.role, title: resolved.title, label: resolved.label, value: resolved.value) {
+                if actionPolicy.isDestructive(role: resolved.role, title: resolved.title, label: resolved.label, value: resolved.value) {
                     throw AutomationError.permissionDenied("Refusing to target a potentially destructive UI element.")
                 }
 

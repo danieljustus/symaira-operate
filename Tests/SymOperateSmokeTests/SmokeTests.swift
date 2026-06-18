@@ -107,7 +107,7 @@ final class SmokeTests: XCTestCase {
 
     // MARK: - Doctor
 
-    func testDoctorOutputsContainProbes() throws {
+    func testDoctorOutputsContainCapabilities() throws {
         let repoRoot = URL(fileURLWithPath: #file)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -133,16 +133,14 @@ final class SmokeTests: XCTestCase {
             return
         }
 
-        XCTAssertNotNil(json["screenshotProbe"], "Expected screenshotProbe in doctor output")
-        XCTAssertNotNil(json["accessibilityProbe"], "Expected accessibilityProbe in doctor output")
+        XCTAssertNotNil(json["ok"], "Expected ok in doctor output")
+        XCTAssertNotNil(json["capabilities"], "Expected capabilities in doctor output")
+        XCTAssertNotNil(json["permissions"], "Expected permissions in doctor output")
+        XCTAssertNotNil(json["recommendations"], "Expected recommendations in doctor output")
 
-        if let screenshotProbe = json["screenshotProbe"] as? [String: Any] {
-            XCTAssertNotNil(screenshotProbe["ok"])
-            XCTAssertNotNil(screenshotProbe["message"])
-        }
-        if let accessibilityProbe = json["accessibilityProbe"] as? [String: Any] {
-            XCTAssertNotNil(accessibilityProbe["ok"])
-            XCTAssertNotNil(accessibilityProbe["message"])
+        if let capabilities = json["capabilities"] as? [String: Bool] {
+            XCTAssertNotNil(capabilities["screenshot"])
+            XCTAssertNotNil(capabilities["accessibility"])
         }
     }
 }

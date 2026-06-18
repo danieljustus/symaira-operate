@@ -38,6 +38,18 @@ public struct RectValue: Codable, Sendable, Equatable {
     }
 }
 
+public struct DisplayInfo: Codable, Sendable {
+    public let displayID: UInt32
+    public let bounds: RectValue
+    public let isMain: Bool
+
+    public init(displayID: UInt32, bounds: RectValue, isMain: Bool) {
+        self.displayID = displayID
+        self.bounds = bounds
+        self.isMain = isMain
+    }
+}
+
 public struct PermissionSnapshot: Codable, Sendable {
     public let accessibilityGranted: Bool
     public let screenRecordingGranted: Bool
@@ -175,6 +187,22 @@ public struct UIQueryResult: Codable, Sendable {
         self.snapshot = snapshot
         self.app = app
         self.nodes = nodes
+    }
+}
+
+public struct UIQueryResultWithOCR: Codable, Sendable {
+    public let snapshot: Snapshot
+    public let app: AppInfo?
+    public let nodes: [UINode]
+    public let ocrResult: OCRResult?
+    public let axTreeWeak: Bool
+
+    public init(snapshot: Snapshot, app: AppInfo?, nodes: [UINode], ocrResult: OCRResult?, axTreeWeak: Bool) {
+        self.snapshot = snapshot
+        self.app = app
+        self.nodes = nodes
+        self.ocrResult = ocrResult
+        self.axTreeWeak = axTreeWeak
     }
 }
 

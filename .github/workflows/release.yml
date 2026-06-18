@@ -1,0 +1,88 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Build release binary
+        run: swift build -c release
+
+      - name: Create DMG
+        run: |
+          mkdir -p dmg
+          cp .build/release/symoperate dmg/
+          hdiutil create -volname "symoperate" -srcfolder dmg -ov -format UDZO symoperate.dmg
+
+      - name: Sign with Developer ID
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -n "$APPLE_CERTIFICATE" ]; then
+            echo "$APPLE_CERTIFICATE" | base64 --decode > cert.p12
+            security create-keychain -p "" build.keychain
+            security default-keychain -s build.keychain
+            security unlock-keychain -p "" build.keychain
+            security import cert.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" build.keychain
+            codesign --force --sign "Developer ID Application" --keychain build.keychain --timestamp symoperate.dmg
+          fi
+
+      - name: Notarize
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          if [ -n "$APPLE_ID" ]; then
+            xcrun notarytool submit symoperate.dmg \
+              --apple-id "$APPLE_ID" \
+              --team-id "$APPLE_TEAM_ID" \
+              --password "$APPLE_APP_PASSWORD" \
+              --wait
+            xcrun stapler staple symoperate.dmg
+          fi
+
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: symoperate.dmg
+          generate_release_notes: true
+          body: |
+            ## symoperate ${{ steps.version.outputs.version }}
+
+            ### Installation
+
+            **Homebrew (recommended):**
+            ```bash
+            brew install danieljustus/tap/symoperate
+            ```
+
+            **Direct download:** Download `symoperate.dmg` below, open it, and move `symoperate` to `/usr/local/bin/`.
+
+            ### Permissions
+            ```bash
+            symoperate permissions grant accessibility
+            symoperate permissions grant screen
+            symoperate doctor
+            ```
