@@ -349,7 +349,7 @@ public final class MCPServer {
         // For snapshot responses, skip the text field to avoid double base64 serialization
         if tool == "snapshot" || tool == "query_ui" || tool == "query_ui_ocr" || tool == "find_ui" {
             if let dict = payload as? [String: Any],
-               let _ = dict["imageBase64PNG"] {
+               dict["imageBase64PNG"] != nil {
                 return "\(tool) completed. See structuredContent for full result."
             }
         }
@@ -436,38 +436,30 @@ public final class MCPServer {
         return data
     }
 
-    private func string(_ value: Any?) -> String? {
-        value as? String
-    }
+    private func string(_ value: Any?) -> String? { value as? String }
 
     private func double(_ value: Any?) -> Double? {
-        if let number = value as? NSNumber { return number.doubleValue }
-        if let string = value as? String { return Double(string) }
-        return nil
+        if let n = value as? NSNumber { return n.doubleValue }
+        return (value as? String).flatMap(Double.init)
     }
 
     private func uint32(_ value: Any?) -> UInt32? {
-        if let number = value as? NSNumber { return number.uint32Value }
-        if let string = value as? String, let val = UInt32(string) { return val }
-        return nil
+        if let n = value as? NSNumber { return n.uint32Value }
+        return (value as? String).flatMap(UInt32.init)
     }
 
     private func intOptional(_ value: Any?) -> Int? {
-        if let number = value as? NSNumber { return number.intValue }
-        if let string = value as? String, let val = Int(string) { return val }
-        return nil
+        if let n = value as? NSNumber { return n.intValue }
+        return (value as? String).flatMap(Int.init)
     }
 
     private func int(_ value: Any?, default defaultValue: Int) -> Int {
-        if let number = value as? NSNumber { return number.intValue }
-        if let string = value as? String, let int = Int(string) { return int }
-        return defaultValue
+        intOptional(value) ?? defaultValue
     }
 
     private func bool(_ value: Any?, default defaultValue: Bool) -> Bool {
-        if let bool = value as? Bool { return bool }
-        if let number = value as? NSNumber { return number.boolValue }
-        return defaultValue
+        if let b = value as? Bool { return b }
+        return (value as? NSNumber)?.boolValue ?? defaultValue
     }
 
     private func requireString(_ value: Any?, name: String) throws -> String {
