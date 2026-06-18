@@ -6,6 +6,7 @@ enum Command: String {
     case serve
     case doctor
     case permissions
+    case version
 }
 
 let controller = AutomationController()
@@ -17,6 +18,7 @@ func printUsage() {
     Commands:
       serve                          Run the MCP server over stdio.
       doctor                         Print permission status and environment checks (JSON).
+      version                        Print version and check for updates.
       permissions status             Print the current macOS permissions.
       permissions grant accessibility  Trigger the Accessibility permission prompt.
       permissions grant screen         Trigger the Screen Recording permission prompt.
@@ -53,6 +55,21 @@ do {
     switch first {
     case Command.serve.rawValue:
         try MCPServer(controller: controller).run()
+    case Command.version.rawValue:
+        let checker = UpdateChecker()
+        let update = checker.checkForUpdate()
+        struct VersionReport: Codable {
+            let version: String
+            let updateAvailable: Bool
+            let latestVersion: String?
+            let releaseURL: String?
+        }
+        try printJSON(VersionReport(
+            version: "0.1.0",
+            updateAvailable: update.updateAvailable,
+            latestVersion: update.latestVersion,
+            releaseURL: update.releaseURL
+        ))
     case Command.doctor.rawValue:
         let permissions = controller.permissionsStatus()
         let apps = controller.listApps()

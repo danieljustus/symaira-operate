@@ -188,6 +188,7 @@ public final class MCPServer {
                     "allow_bundle_ids": ["type": "array", "items": ["type": "string"], "description": "Bundle IDs to exempt from destructive checks."],
                 ],
             ]),
+            tool("version", description: "Print current version and check for updates from GitHub releases.", input: [:]),
         ]
     }
 
@@ -310,6 +311,9 @@ public final class MCPServer {
                 displayID: uint32(arguments["display_id"]),
                 windowID: intOptional(arguments["window_id"])
             )
+        case "version":
+            let checker = UpdateChecker()
+            payload = checker.checkForUpdate()
         default:
             throw AutomationError.notFound("Unknown tool '\(name)'.")
         }
