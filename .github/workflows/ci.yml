@@ -20,3 +20,12 @@ jobs:
         run: swift build -v
       - name: Test
         run: swift test -v
+
+  swiftlint:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install SwiftLint
+        run: brew install swiftlint
+      - name: Lint
+        run: swiftlint lint --strict --reporter github-actions-logging
