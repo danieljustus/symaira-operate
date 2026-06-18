@@ -190,6 +190,22 @@ public struct UIQueryResult: Codable, Sendable {
     }
 }
 
+public struct UIQueryResultWithOCR: Codable, Sendable {
+    public let snapshot: Snapshot
+    public let app: AppInfo?
+    public let nodes: [UINode]
+    public let ocrResult: OCRResult?
+    public let axTreeWeak: Bool
+
+    public init(snapshot: Snapshot, app: AppInfo?, nodes: [UINode], ocrResult: OCRResult?, axTreeWeak: Bool) {
+        self.snapshot = snapshot
+        self.app = app
+        self.nodes = nodes
+        self.ocrResult = ocrResult
+        self.axTreeWeak = axTreeWeak
+    }
+}
+
 public struct ActionResult: Codable, Sendable {
     public let ok: Bool
     public let message: String

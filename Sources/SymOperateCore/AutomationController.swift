@@ -1,3 +1,5 @@
+import AppKit
+import CoreGraphics
 import Foundation
 
 public final class AutomationController {
@@ -6,6 +8,7 @@ public final class AutomationController {
     private let apps = AppService()
     let accessibility = AccessibilityService()
     private let input = InputService()
+    private let ocr = OCRService()
 
     private struct DestructiveActionPolicy {
         static let blockedKeywords: Set<String> = [
@@ -72,6 +75,37 @@ public final class AutomationController {
         let snapshot = try self.snapshot(displayID: displayID, windowID: windowID)
         let nodes = try accessibility.queryFrontmostUI(snapshotID: snapshot.id, maxDepth: maxDepth, maxNodes: maxNodes)
         return UIQueryResult(snapshot: snapshot, app: apps.frontmostApp(), nodes: nodes)
+    }
+
+    public func queryUIWithOCR(maxDepth: Int = 4, maxNodes: Int = 200, displayID: UInt32? = nil, windowID: Int? = nil) throws -> UIQueryResultWithOCR {
+        let snapshot = try self.snapshot(displayID: displayID, windowID: windowID)
+        let nodes = try accessibility.queryFrontmostUI(snapshotID: snapshot.id, maxDepth: maxDepth, maxNodes: maxNodes)
+        let isWeak = ocr.isAXTreeWeak(nodeCount: countNodes(nodes))
+
+        var ocrResult: OCRResult?
+        if isWeak, let imageData = Data(base64Encoded: snapshot.imageBase64PNG) {
+            if let bitmapRep = NSBitmapImageRep(data: imageData),
+               let cgImage = bitmapRep.cgImage {
+                ocrResult = ocr.recognizeText(in: cgImage)
+            }
+        }
+
+        return UIQueryResultWithOCR(
+            snapshot: snapshot,
+            app: apps.frontmostApp(),
+            nodes: nodes,
+            ocrResult: ocrResult,
+            axTreeWeak: isWeak
+        )
+    }
+
+    private func countNodes(_ nodes: [UINode]) -> Int {
+        var count = 0
+        for node in nodes {
+            count += 1
+            count += countNodes(node.children)
+        }
+        return count
     }
 
     public func click(

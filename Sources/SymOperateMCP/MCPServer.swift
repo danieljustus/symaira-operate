@@ -86,6 +86,15 @@ public final class MCPServer {
                     "window_id": ["type": "integer", "description": "Window ID to capture. When provided, display_id is ignored."],
                 ],
             ]),
+            tool("query_ui_ocr", description: "Like query_ui but falls back to Vision OCR when the Accessibility tree is weak. Returns OCR text regions with coordinates.", input: [
+                "type": "object",
+                "properties": [
+                    "max_depth": ["type": "integer", "default": 4],
+                    "max_nodes": ["type": "integer", "default": 200],
+                    "display_id": ["type": "integer", "description": "Display ID to capture. Omit for main display."],
+                    "window_id": ["type": "integer", "description": "Window ID to capture. When provided, display_id is ignored."],
+                ],
+            ]),
             tool("click", description: "Click by x/y coordinates or by snapshot_id + element_id.", input: [
                 "type": "object",
                 "properties": [
@@ -190,6 +199,13 @@ public final class MCPServer {
             payload = controller.listDisplays()
         case "query_ui":
             payload = try controller.queryUI(
+                maxDepth: int(arguments["max_depth"], default: 4),
+                maxNodes: int(arguments["max_nodes"], default: 200),
+                displayID: uint32(arguments["display_id"]),
+                windowID: intOptional(arguments["window_id"])
+            )
+        case "query_ui_ocr":
+            payload = try controller.queryUIWithOCR(
                 maxDepth: int(arguments["max_depth"], default: 4),
                 maxNodes: int(arguments["max_nodes"], default: 200),
                 displayID: uint32(arguments["display_id"]),

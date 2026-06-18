@@ -25,7 +25,7 @@ final class MCPServerTests: XCTestCase {
     func testToolsListReturnsAllTools() throws {
         let result = try server.dispatch(method: "tools/list", params: [:])
         let tools = result["tools"] as? [[String: Any]]
-        XCTAssertEqual(tools?.count, 15)
+        XCTAssertEqual(tools?.count, 16)
         let names = tools?.compactMap { $0["name"] as? String }
         XCTAssertTrue(names?.contains("snapshot") ?? false)
         XCTAssertTrue(names?.contains("click") ?? false)
