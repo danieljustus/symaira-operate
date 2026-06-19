@@ -170,7 +170,7 @@ public final class AutomationController {
         return ActionResult(ok: true, message: "Menu action triggered: \(path.joined(separator: " > ")).", snapshot: try? screen.captureMainDisplay())
     }
 
-    public func waitFor(text: String?, app: String?, timeoutSeconds: Double = 10) throws -> ActionResult {
+    public func waitFor(text: String?, app: String?, timeoutSeconds: Double = 10) async throws -> ActionResult {
         let deadline = Date().addingTimeInterval(timeoutSeconds)
         while Date() < deadline {
             if let app, !app.isEmpty {
@@ -186,7 +186,7 @@ public final class AutomationController {
                 return ActionResult(ok: true, message: "Observed text '\(text)'.", snapshot: try? screen.captureMainDisplay())
             }
 
-            Thread.sleep(forTimeInterval: 0.4)
+            try await Task.sleep(nanoseconds: 400_000_000) // 0.4 seconds
         }
 
         throw AutomationError.operationFailed("Condition was not met within \(timeoutSeconds) seconds.")

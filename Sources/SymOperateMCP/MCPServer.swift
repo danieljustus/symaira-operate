@@ -14,7 +14,7 @@ public final class MCPServer {
         encoder.outputFormatting = [.sortedKeys]
     }
 
-    public func run() throws {
+    public func run() async throws {
         let stdin = FileHandle.standardInput
         while let message = try readMessage(from: stdin) {
             guard
@@ -28,7 +28,7 @@ public final class MCPServer {
             let params = object["params"] as? [String: Any] ?? [:]
 
             do {
-                let result = try dispatch(method: method, params: params)
+                let result = try await dispatch(method: method, params: params)
                 try sendResponse(id: id, result: result)
             } catch {
                 try sendError(id: id, code: -32000, message: error.localizedDescription)
@@ -36,7 +36,7 @@ public final class MCPServer {
         }
     }
 
-    public func dispatch(method: String, params: [String: Any]) throws -> [String: Any] {
+    public func dispatch(method: String, params: [String: Any]) async throws -> [String: Any] {
         switch method {
         case "initialize":
             return initializeResult(requestedProtocol: params["protocolVersion"] as? String)
@@ -47,7 +47,7 @@ public final class MCPServer {
         case "tools/list":
             return ["tools": tools()]
         case "tools/call":
-            return try callTool(params: params)
+            return try await callTool(params: params)
         default:
             throw AutomationError.invalidArgument("Method not found: \(method)")
         }
@@ -203,7 +203,7 @@ public final class MCPServer {
         ]
     }
 
-    private func callTool(params: [String: Any]) throws -> [String: Any] {
+    private func callTool(params: [String: Any]) async throws -> [String: Any] {
         guard let name = params["name"] as? String else {
             throw AutomationError.invalidArgument("tools/call requires a tool name.")
         }
@@ -278,7 +278,7 @@ public final class MCPServer {
         case "menu_action":
             payload = try controller.menuAction(path: requireStringArray(arguments["path"], name: "path"))
         case "wait_for":
-            payload = try controller.waitFor(
+            payload = try await controller.waitFor(
                 text: string(arguments["text"]),
                 app: string(arguments["app"]),
                 timeoutSeconds: double(arguments["timeout_seconds"]) ?? 10

@@ -54,7 +54,15 @@ do {
 
     switch first {
     case Command.serve.rawValue:
-        try MCPServer(controller: controller).run()
+        Task { @Sendable in
+            do {
+                try await MCPServer(controller: AutomationController()).run()
+            } catch {
+                FileHandle.standardError.write(Data("error: \(error.localizedDescription)\n".utf8))
+            }
+            exit(0)
+        }
+        dispatchMain()
     case Command.version.rawValue:
         let checker = UpdateChecker()
         let update = checker.checkForUpdate()
