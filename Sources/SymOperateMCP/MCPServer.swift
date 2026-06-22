@@ -110,7 +110,7 @@ public final class MCPServer {
                     "snapshot_id": ["type": "string", "description": "Reuse an existing snapshot. If omitted, takes a fresh one."],
                 ],
             ]),
-            tool("click", description: "Click by x/y coordinates or by snapshot_id + element_id.", input: [
+            tool("click", description: "Click by x/y coordinates or by snapshot_id + element_id. Raw coordinates require a prior query_ui snapshot so the target element can be identified and safety-checked; destructive controls and secure text fields are always blocked.", input: [
                 "type": "object",
                 "properties": [
                     "snapshot_id": ["type": "string"],
@@ -139,7 +139,7 @@ public final class MCPServer {
                 ],
                 "required": ["delta_y"],
             ]),
-            tool("drag", description: "Drag from one coordinate or element to another.", input: [
+            tool("drag", description: "Drag from one coordinate or element to another. Raw coordinates require a prior query_ui snapshot so the target element can be identified and safety-checked; destructive controls and secure text fields are always blocked.", input: [
                 "type": "object",
                 "properties": [
                     "snapshot_id": ["type": "string"],
