@@ -15,6 +15,7 @@ public final class AccessibilityService {
     internal var elementCache: [String: [String: ResolvedElement]] = [:]
     internal var cacheOrder: [String] = []
     private let maxCacheSnapshots = 20
+    internal var _testFocusedRoleOverride: String?
 
     public init() {}
 
@@ -56,6 +57,14 @@ public final class AccessibilityService {
         let element = AXUIElementCreateApplication(0)
         let resolved = ResolvedElement(element: element, frame: frame, role: role, title: title, label: label, value: value)
         elementCache[snapshotID] = [elementID: resolved]
+    }
+
+    public func frontmostFocusedElementRole() -> String? {
+        if let override = _testFocusedRoleOverride { return override }
+        guard AXIsProcessTrusted(), let app = NSWorkspace.shared.frontmostApplication else { return nil }
+        let axApp = AXUIElementCreateApplication(app.processIdentifier)
+        guard let focusedElement = axCopyElement(axApp, attribute: kAXFocusedUIElementAttribute) else { return nil }
+        return axCopyString(focusedElement, attribute: kAXRoleAttribute)
     }
 
     public func frontmostContainsText(_ text: String) -> Bool {
