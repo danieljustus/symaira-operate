@@ -17,6 +17,11 @@ public final class AccessibilityService: AccessibilityServiceProtocol {
     private let maxCacheSnapshots = 20
     internal var _testFocusedRoleOverride: String?
 
+    // Polling cache: avoids full AX walks when the frontmost PID hasn't changed
+    // and we already confirmed the text is absent.
+    internal var pollingCachePID: pid_t?
+    internal var pollingAbsentTexts: Set<String> = []
+
     public init() {}
 
     private func evictIfNeeded() {
@@ -91,6 +96,35 @@ public final class AccessibilityService: AccessibilityServiceProtocol {
         let axApp = AXUIElementCreateApplication(app.processIdentifier)
         var seen = 0
         return searchText(in: axApp, needle: text.lowercased(), remainingDepth: 6, seen: &seen, maxNodes: 300)
+    }
+
+    public func frontmostContainsTextPolling(_ text: String) -> Bool {
+        guard AXIsProcessTrusted(), let app = NSWorkspace.shared.frontmostApplication else { return false }
+        let pid = app.processIdentifier
+        let needle = text.lowercased()
+
+        if pid == pollingCachePID, pollingAbsentTexts.contains(needle) {
+            return false
+        }
+
+        if pid != pollingCachePID {
+            pollingCachePID = pid
+            pollingAbsentTexts.removeAll()
+        }
+
+        let axApp = AXUIElementCreateApplication(pid)
+        var seen = 0
+        let found = searchText(in: axApp, needle: needle, remainingDepth: 3, seen: &seen, maxNodes: 50)
+
+        if !found {
+            pollingAbsentTexts.insert(needle)
+        }
+        return found
+    }
+
+    public func invalidatePollingCache() {
+        pollingCachePID = nil
+        pollingAbsentTexts.removeAll()
     }
 
     public func performMenuAction(path: [String]) throws {

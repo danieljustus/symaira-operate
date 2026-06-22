@@ -191,6 +191,17 @@ public final class AutomationController {
     }
 
     public func waitFor(text: String?, app: String?, timeoutSeconds: Double = 10) async throws -> ActionResult {
+        accessibility.invalidatePollingCache()
+
+        let observer = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [accessibility] _ in
+            accessibility.invalidatePollingCache()
+        }
+        defer { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
+
         let deadline = Date().addingTimeInterval(timeoutSeconds)
         while Date() < deadline {
             if let app, !app.isEmpty {
@@ -202,7 +213,7 @@ public final class AutomationController {
                 }
             }
 
-            if let text, !text.isEmpty, accessibility.frontmostContainsText(text) {
+            if let text, !text.isEmpty, accessibility.frontmostContainsTextPolling(text) {
                 return ActionResult(ok: true, message: "Observed text '\(text)'.", snapshot: try? screen.captureMainDisplay())
             }
 

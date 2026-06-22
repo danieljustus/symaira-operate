@@ -36,7 +36,20 @@ public protocol AccessibilityServiceProtocol {
     func resolveElementAtPoint(x: Double, y: Double) -> AccessibilityService.ResolvedElement?
     func frontmostFocusedElementRole() -> String?
     func frontmostContainsText(_ text: String) -> Bool
+    /// Lightweight polling variant: caches the last frontmost PID and confirmed-absent
+    /// text strings so repeated polls skip IPC for unchanged elements.
+    func frontmostContainsTextPolling(_ text: String) -> Bool
+    /// Reset the polling cache (e.g. when the frontmost application changes).
+    func invalidatePollingCache()
     func performMenuAction(path: [String]) throws
+}
+
+extension AccessibilityServiceProtocol {
+    public func frontmostContainsTextPolling(_ text: String) -> Bool {
+        frontmostContainsText(text)
+    }
+
+    public func invalidatePollingCache() {}
 }
 
 // MARK: - Input Service
