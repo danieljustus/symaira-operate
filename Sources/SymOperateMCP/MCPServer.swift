@@ -317,7 +317,7 @@ public final class MCPServer {
             )
         case "version":
             let checker = UpdateChecker()
-            payload = checker.checkForUpdate()
+            payload = await checker.checkForUpdate()
         default:
             throw AutomationError.notFound("Unknown tool '\(name)'.")
         }
