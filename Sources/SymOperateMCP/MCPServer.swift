@@ -73,7 +73,7 @@ public final class MCPServer {
             tool("list_apps", description: "List currently running GUI apps on macOS.", input: [:]),
             tool("list_windows", description: "List currently visible windows.", input: [:]),
             tool("list_displays", description: "List all connected displays with bounds and IDs.", input: [:]),
-            tool("snapshot", description: "Capture a display or window as PNG plus coordinate transform metadata. Omit display_id for the main display, or provide window_id for a specific window.", input: [
+            tool("snapshot", description: "Capture a display or window as PNG plus coordinate transform metadata. Both parameters are optional: omit both for the main display, provide display_id for a specific display, or provide window_id for a specific window. When window_id is provided, display_id is ignored.", input: [
                 "type": "object",
                 "properties": [
                     "display_id": ["type": "integer", "description": "Display ID to capture. Omit for main display."],
@@ -110,7 +110,7 @@ public final class MCPServer {
                     "snapshot_id": ["type": "string", "description": "Reuse an existing snapshot. If omitted, takes a fresh one."],
                 ],
             ]),
-            tool("click", description: "Click by x/y coordinates or by snapshot_id + element_id. Raw coordinates require a prior query_ui snapshot so the target element can be identified and safety-checked; destructive controls and secure text fields are always blocked.", input: [
+            tool("click", description: "Click by x/y coordinates or by snapshot_id + element_id. Requires exactly one of two groups: (x, y) for coordinate-based clicking, or (snapshot_id, element_id) for element-based clicking. Raw coordinates require a prior query_ui snapshot so the target element can be identified and safety-checked; destructive controls and secure text fields are always blocked. Optional: button (default \"left\"), double_click.", input: [
                 "type": "object",
                 "properties": [
                     "snapshot_id": ["type": "string"],
@@ -119,6 +119,10 @@ public final class MCPServer {
                     "y": ["type": "number"],
                     "button": ["type": "string", "enum": ["left", "right"]],
                     "double_click": ["type": "boolean"],
+                ],
+                "oneOf": [
+                    ["required": ["x", "y"]],
+                    ["required": ["snapshot_id", "element_id"]],
                 ],
             ]),
             tool("type_text", description: "Type raw unicode text into the current focused control.", input: [
@@ -139,7 +143,7 @@ public final class MCPServer {
                 ],
                 "required": ["delta_y"],
             ]),
-            tool("drag", description: "Drag from one coordinate or element to another. Raw coordinates require a prior query_ui snapshot so the target element can be identified and safety-checked; destructive controls and secure text fields are always blocked.", input: [
+            tool("drag", description: "Drag from one coordinate or element to another. Requires exactly one of two groups: (from_x, from_y, to_x, to_y) for coordinate-based dragging, or (snapshot_id, from_element_id, to_element_id) for element-based dragging. Raw coordinates require a prior query_ui snapshot so the target element can be identified and safety-checked; destructive controls and secure text fields are always blocked.", input: [
                 "type": "object",
                 "properties": [
                     "snapshot_id": ["type": "string"],
@@ -150,20 +154,32 @@ public final class MCPServer {
                     "to_x": ["type": "number"],
                     "to_y": ["type": "number"],
                 ],
+                "oneOf": [
+                    ["required": ["from_x", "from_y", "to_x", "to_y"]],
+                    ["required": ["snapshot_id", "from_element_id", "to_element_id"]],
+                ],
             ]),
-            tool("launch_app", description: "Launch an app by bundle_id or app_name.", input: [
+            tool("launch_app", description: "Launch an app by bundle_id or app_name. At least one of bundle_id or app_name is required.", input: [
                 "type": "object",
                 "properties": [
                     "bundle_id": ["type": "string"],
                     "app_name": ["type": "string"],
                 ],
+                "anyOf": [
+                    ["required": ["bundle_id"]],
+                    ["required": ["app_name"]],
+                ],
             ]),
-            tool("focus_window", description: "Activate an app and optionally raise a matching window title.", input: [
+            tool("focus_window", description: "Activate an app and optionally raise a matching window title. At least one of bundle_id or app_name is required.", input: [
                 "type": "object",
                 "properties": [
                     "bundle_id": ["type": "string"],
                     "app_name": ["type": "string"],
                     "title": ["type": "string"],
+                ],
+                "anyOf": [
+                    ["required": ["bundle_id"]],
+                    ["required": ["app_name"]],
                 ],
             ]),
             tool("menu_action", description: "Trigger a frontmost-app menu path like [\"File\", \"Save\"].", input: [
