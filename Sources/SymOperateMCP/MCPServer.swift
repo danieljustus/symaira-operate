@@ -98,7 +98,7 @@ public final class MCPServer {
                     "window_id": ["type": "integer", "description": "Window ID to capture. When provided, display_id is ignored."],
                 ],
             ]),
-            tool("find_ui", description: "Search the current UI tree by role, title, label, value, subrole, or actions. Supports regex patterns (wrap in /slashes/).", input: [
+            tool("find_ui", description: "Search the UI tree by role, title, label, value, subrole, or actions. Supports regex patterns (wrap in /slashes/). When snapshot_id is provided and the snapshot is still cached, reuses the existing snapshot instead of taking a fresh one.", input: [
                 "type": "object",
                 "properties": [
                     "role": ["type": "string"],

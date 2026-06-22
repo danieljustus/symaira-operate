@@ -70,12 +70,14 @@ public final class AutomationController {
 
     public func queryUI(maxDepth: Int = 4, maxNodes: Int = 200, displayID: UInt32? = nil, windowID: Int? = nil) throws -> UIQueryResult {
         let snapshot = try self.snapshot(displayID: displayID, windowID: windowID)
+        accessibility.storeSnapshot(snapshot, for: snapshot.id)
         let nodes = try accessibility.queryFrontmostUI(snapshotID: snapshot.id, maxDepth: maxDepth, maxNodes: maxNodes)
         return UIQueryResult(snapshot: snapshot, app: apps.frontmostApp(), nodes: nodes)
     }
 
     public func queryUIWithOCR(maxDepth: Int = 4, maxNodes: Int = 200, displayID: UInt32? = nil, windowID: Int? = nil) throws -> UIQueryResultWithOCR {
         let snapshot = try self.snapshot(displayID: displayID, windowID: windowID)
+        accessibility.storeSnapshot(snapshot, for: snapshot.id)
         let nodes = try accessibility.queryFrontmostUI(snapshotID: snapshot.id, maxDepth: maxDepth, maxNodes: maxNodes)
         let isWeak = ocr.isAXTreeWeak(nodeCount: countNodes(nodes))
 
@@ -116,10 +118,12 @@ public final class AutomationController {
         windowID: Int? = nil
     ) throws -> UIQueryResult {
         let queryResult: UIQueryResult
-        if let snapshotID, let existing = accessibility.resolveElement(snapshotID: snapshotID, elementID: "") {
-            _ = existing
-            // Reuse existing snapshot — just re-run the query against cached tree
-            queryResult = try queryUI(maxDepth: maxDepth, maxNodes: maxNodes, displayID: displayID, windowID: windowID)
+        if let snapshotID, accessibility.hasCachedNodes(for: snapshotID),
+           let cachedNodes = accessibility.cachedNodes(for: snapshotID),
+           let cachedSnapshot = accessibility.cachedSnapshot(for: snapshotID) {
+            // Reuse existing snapshot — run the query against cached tree
+            let matched = queryService.findNodes(in: cachedNodes, predicate: predicate)
+            return UIQueryResult(snapshot: cachedSnapshot, app: apps.frontmostApp(), nodes: matched)
         } else {
             queryResult = try queryUI(maxDepth: maxDepth, maxNodes: maxNodes, displayID: displayID, windowID: windowID)
         }
