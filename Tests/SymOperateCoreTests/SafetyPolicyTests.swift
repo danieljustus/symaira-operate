@@ -1,17 +1,92 @@
 import XCTest
 @testable import SymOperateCore
 
+// MARK: - Mock Services
+
+private final class MockAccessibilityService: AccessibilityServiceProtocol {
+    private var elements: [String: [String: AccessibilityService.ResolvedElement]] = [:]
+
+    func prepopulate(snapshotID: String, elementID: String, role: String?, title: String?, label: String?, value: String?, frame: RectValue?) {
+        let element = AXUIElementCreateApplication(0)
+        let resolved = AccessibilityService.ResolvedElement(element: element, frame: frame, role: role, title: title, label: label, value: value)
+        elements[snapshotID, default: [:]][elementID] = resolved
+    }
+
+    func queryFrontmostUI(snapshotID: String, maxDepth: Int, maxNodes: Int) throws -> [UINode] { [] }
+
+    func resolveElement(snapshotID: String, elementID: String) -> AccessibilityService.ResolvedElement? {
+        elements[snapshotID]?[elementID]
+    }
+
+    func frontmostContainsText(_ text: String) -> Bool { false }
+
+    func performMenuAction(path: [String]) throws {}
+}
+
+private final class MockScreenService: ScreenServiceProtocol {
+    func listDisplays() -> [DisplayInfo] { [] }
+    func captureMainDisplay(maxDimension: CoreGraphics.CGFloat) throws -> Snapshot { throw AutomationError.unavailable("mock") }
+    func captureDisplay(displayID: UInt32, maxDimension: CoreGraphics.CGFloat) throws -> Snapshot { throw AutomationError.unavailable("mock") }
+    func captureWindow(windowID: Int, maxDimension: CoreGraphics.CGFloat) throws -> Snapshot { throw AutomationError.unavailable("mock") }
+}
+
+private final class MockInputService: InputServiceProtocol {
+    func click(at point: PointValue, button: String, doubleClick: Bool) throws {}
+    func typeText(_ text: String) throws {}
+    func pressKeys(_ keys: [String]) throws {}
+    func scroll(deltaX: Double, deltaY: Double) throws {}
+    func drag(from start: PointValue, to end: PointValue, steps: Int) throws {}
+}
+
+private final class MockAppService: AppServiceProtocol {
+    func listApps() -> [AppInfo] { [] }
+    func listWindows() -> [WindowInfo] { [] }
+    func frontmostApp() -> AppInfo? { nil }
+    func launchApp(bundleID: String?, appName: String?) throws {}
+    func focusWindow(bundleID: String?, appName: String?, title: String?) throws {}
+}
+
+private final class MockOCRService: OCRServiceProtocol {
+    func recognizeText(in image: CoreGraphics.CGImage) -> OCRResult { OCRResult(regions: [], fullText: "") }
+    func isAXTreeWeak(nodeCount: Int, threshold: Int) -> Bool { nodeCount <= threshold }
+}
+
+private final class MockUIQueryService: UIQueryServiceProtocol {
+    func findNodes(in nodes: [UINode], predicate: UIElementPredicate) -> [UINode] {
+        nodes.filter { predicate.matches(node: $0) }
+    }
+}
+
+private final class MockPermissionService: PermissionServiceProtocol {
+    func status() -> PermissionSnapshot { PermissionSnapshot(accessibilityGranted: true, screenRecordingGranted: true) }
+    func requestAccessibilityPermission() -> Bool { true }
+    func requestScreenRecordingPermission() -> Bool { true }
+}
+
+// MARK: - Tests
+
 final class SafetyPolicyTests: XCTestCase {
 
     private var controller: AutomationController!
+    private var mockAX: MockAccessibilityService!
 
     override func setUp() {
         super.setUp()
-        controller = AutomationController()
+        mockAX = MockAccessibilityService()
+        controller = AutomationController(
+            permissions: MockPermissionService(),
+            screen: MockScreenService(),
+            apps: MockAppService(),
+            accessibility: mockAX,
+            input: MockInputService(),
+            ocr: MockOCRService(),
+            queryService: MockUIQueryService()
+        )
     }
 
     override func tearDown() {
         controller = nil
+        mockAX = nil
         super.tearDown()
     }
 
@@ -22,7 +97,7 @@ final class SafetyPolicyTests: XCTestCase {
         let elementID = "delete-element"
 
         let frame = RectValue(x: 100, y: 100, width: 50, height: 30)
-        controller.accessibility.prepopulateForTesting(
+        mockAX.prepopulate(
             snapshotID: snapshotID,
             elementID: elementID,
             role: "AXButton",
@@ -52,7 +127,7 @@ final class SafetyPolicyTests: XCTestCase {
         let elementID = "save-element"
 
         let frame = RectValue(x: 100, y: 100, width: 50, height: 30)
-        controller.accessibility.prepopulateForTesting(
+        mockAX.prepopulate(
             snapshotID: snapshotID,
             elementID: elementID,
             role: "AXButton",
@@ -83,7 +158,7 @@ final class SafetyPolicyTests: XCTestCase {
         let elementID = "remove-element"
 
         let frame = RectValue(x: 200, y: 200, width: 60, height: 40)
-        controller.accessibility.prepopulateForTesting(
+        mockAX.prepopulate(
             snapshotID: snapshotID,
             elementID: elementID,
             role: "AXButton",
@@ -113,7 +188,7 @@ final class SafetyPolicyTests: XCTestCase {
         let elementID = "erase-element"
 
         let frame = RectValue(x: 300, y: 300, width: 70, height: 35)
-        controller.accessibility.prepopulateForTesting(
+        mockAX.prepopulate(
             snapshotID: snapshotID,
             elementID: elementID,
             role: "AXButton",
@@ -145,7 +220,7 @@ final class SafetyPolicyTests: XCTestCase {
         let fromElementID = "delete-drag-source"
 
         let frame = RectValue(x: 100, y: 100, width: 50, height: 30)
-        controller.accessibility.prepopulateForTesting(
+        mockAX.prepopulate(
             snapshotID: snapshotID,
             elementID: fromElementID,
             role: "AXButton",
@@ -180,7 +255,7 @@ final class SafetyPolicyTests: XCTestCase {
         let toElementID = "remove-drag-target"
 
         let frame = RectValue(x: 200, y: 200, width: 50, height: 30)
-        controller.accessibility.prepopulateForTesting(
+        mockAX.prepopulate(
             snapshotID: snapshotID,
             elementID: toElementID,
             role: "AXButton",

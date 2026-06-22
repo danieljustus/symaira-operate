@@ -25,7 +25,7 @@ public struct OCRResult: Codable, Sendable {
     }
 }
 
-public struct OCRService {
+public struct OCRService: OCRServiceProtocol {
     public init() {}
 
     public func recognizeText(in image: CGImage) -> OCRResult {

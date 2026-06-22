@@ -2,7 +2,7 @@ import AppKit
 import ApplicationServices
 import Foundation
 
-public final class AccessibilityService {
+public final class AccessibilityService: AccessibilityServiceProtocol {
     public struct ResolvedElement {
         public let element: AXUIElement
         public let frame: RectValue?
@@ -50,12 +50,6 @@ public final class AccessibilityService {
 
     public func resolveElement(snapshotID: String, elementID: String) -> ResolvedElement? {
         elementCache[snapshotID]?[elementID]
-    }
-
-    public func prepopulateForTesting(snapshotID: String, elementID: String, role: String?, title: String?, label: String?, value: String?, frame: RectValue?) {
-        let element = AXUIElementCreateApplication(0)
-        let resolved = ResolvedElement(element: element, frame: frame, role: role, title: title, label: label, value: value)
-        elementCache[snapshotID] = [elementID: resolved]
     }
 
     public func frontmostContainsText(_ text: String) -> Bool {

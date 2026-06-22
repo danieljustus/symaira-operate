@@ -2,7 +2,7 @@ import AppKit
 import ApplicationServices
 import Foundation
 
-public struct InputService {
+public struct InputService: InputServiceProtocol {
     public init() {}
 
     public func click(at point: PointValue, button: String = "left", doubleClick: Bool = false) throws {
