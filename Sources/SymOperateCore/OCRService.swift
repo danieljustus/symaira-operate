@@ -28,9 +28,31 @@ public struct OCRResult: Codable, Sendable {
 public struct OCRService {
     public init() {}
 
+    /// Confidence threshold below which the fast pass is considered insufficient
+    /// and a second `.accurate` pass is performed.
+    public static let lowConfidenceThreshold: Float = 0.5
+
+    /// Recognize text in a screenshot. Starts with `.fast` recognition; if the
+    /// average candidate confidence is below `lowConfidenceThreshold`, retries
+    /// with `.accurate` for better results at the cost of latency.
     public func recognizeText(in image: CGImage) -> OCRResult {
+        let fastResult = runRecognition(in: image, level: .fast)
+        let avgConfidence = averageConfidence(fastResult.regions)
+
+        if avgConfidence >= Self.lowConfidenceThreshold {
+            return fastResult
+        }
+
+        let accurateResult = runRecognition(in: image, level: .accurate)
+        if averageConfidence(accurateResult.regions) >= avgConfidence {
+            return accurateResult
+        }
+        return fastResult
+    }
+
+    func runRecognition(in image: CGImage, level: VNRequestTextRecognitionLevel) -> OCRResult {
         let request = VNRecognizeTextRequest()
-        request.recognitionLevel = .accurate
+        request.recognitionLevel = level
         request.usesLanguageCorrection = true
 
         let handler = VNImageRequestHandler(cgImage: image, options: [:])
@@ -69,7 +91,15 @@ public struct OCRService {
         return OCRResult(regions: regions, fullText: fullTextParts.joined(separator: "\n"))
     }
 
-    public func isAXTreeWeak(nodeCount: Int, threshold: Int = 3) -> Bool {
+    func averageConfidence(_ regions: [OCRTextRegion]) -> Float {
+        guard !regions.isEmpty else { return 0 }
+        return regions.map(\.confidence).reduce(0, +) / Float(regions.count)
+    }
+
+    /// Apps with very few AX nodes likely rely on custom drawing — OCR can help.
+    /// Threshold raised to 75 so that real-world apps with a modest number of
+    /// accessible elements still get OCR supplementation.
+    public func isAXTreeWeak(nodeCount: Int, threshold: Int = 75) -> Bool {
         nodeCount <= threshold
     }
 }
