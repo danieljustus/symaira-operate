@@ -64,20 +64,26 @@ do {
         }
         dispatchMain()
     case Command.version.rawValue:
-        let checker = UpdateChecker()
-        let update = checker.checkForUpdate()
-        struct VersionReport: Codable {
-            let version: String
-            let updateAvailable: Bool
-            let latestVersion: String?
-            let releaseURL: String?
+        Task { @Sendable in
+            let checker = UpdateChecker()
+            let update = await checker.checkForUpdate()
+            struct VersionReport: Codable {
+                let version: String
+                let updateAvailable: Bool
+                let latestVersion: String?
+                let releaseURL: String?
+                let error: String?
+            }
+            try? printJSON(VersionReport(
+                version: SymOperateVersion.current,
+                updateAvailable: update.updateAvailable,
+                latestVersion: update.latestVersion,
+                releaseURL: update.releaseURL,
+                error: update.error
+            ))
+            exit(0)
         }
-        try printJSON(VersionReport(
-            version: SymOperateVersion.current,
-            updateAvailable: update.updateAvailable,
-            latestVersion: update.latestVersion,
-            releaseURL: update.releaseURL
-        ))
+        dispatchMain()
     case Command.doctor.rawValue:
         let permissions = controller.permissionsStatus()
         let apps = controller.listApps()
