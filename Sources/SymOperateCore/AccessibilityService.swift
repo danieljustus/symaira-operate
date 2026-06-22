@@ -13,6 +13,8 @@ public final class AccessibilityService: AccessibilityServiceProtocol {
     }
 
     internal var elementCache: [String: [String: ResolvedElement]] = [:]
+    internal var nodesCache: [String: [UINode]] = [:]
+    internal var snapshotCache: [String: Snapshot] = [:]
     internal var cacheOrder: [String] = []
     private let maxCacheSnapshots = 20
     internal var _testFocusedRoleOverride: String?
@@ -31,6 +33,8 @@ public final class AccessibilityService: AccessibilityServiceProtocol {
         cacheOrder.removeFirst(removeCount)
         for snapshotID in toRemove {
             elementCache.removeValue(forKey: snapshotID)
+            nodesCache.removeValue(forKey: snapshotID)
+            snapshotCache.removeValue(forKey: snapshotID)
         }
     }
 
@@ -50,12 +54,29 @@ public final class AccessibilityService: AccessibilityServiceProtocol {
         let nodes = roots.compactMap { buildNode(element: $0, depth: 0, maxDepth: maxDepth, remainingNodes: &remaining, cache: &cache) }
         evictIfNeeded()
         elementCache[snapshotID] = cache
+        nodesCache[snapshotID] = nodes
         cacheOrder.append(snapshotID)
         return nodes
     }
 
     public func resolveElement(snapshotID: String, elementID: String) -> ResolvedElement? {
         elementCache[snapshotID]?[elementID]
+    }
+
+    public func hasCachedNodes(for snapshotID: String) -> Bool {
+        nodesCache[snapshotID] != nil
+    }
+
+    public func cachedNodes(for snapshotID: String) -> [UINode]? {
+        nodesCache[snapshotID]
+    }
+
+    public func cachedSnapshot(for snapshotID: String) -> Snapshot? {
+        snapshotCache[snapshotID]
+    }
+
+    public func storeSnapshot(_ snapshot: Snapshot, for snapshotID: String) {
+        snapshotCache[snapshotID] = snapshot
     }
 
     /// Find the most specific (smallest-frame) cached element whose frame contains the given point.

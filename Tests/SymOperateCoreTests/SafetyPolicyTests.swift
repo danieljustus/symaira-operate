@@ -5,6 +5,8 @@ import XCTest
 
 private final class MockAccessibilityService: AccessibilityServiceProtocol {
     private var elements: [String: [String: AccessibilityService.ResolvedElement]] = [:]
+    private var nodesCache: [String: [UINode]] = [:]
+    private var snapshotCache: [String: Snapshot] = [:]
     var focusedRoleOverride: String?
 
     func prepopulate(snapshotID: String, elementID: String, role: String?, title: String?, label: String?, value: String?, frame: RectValue?) {
@@ -48,6 +50,26 @@ private final class MockAccessibilityService: AccessibilityServiceProtocol {
         return bestMatch
     }
 
+    func hasCachedNodes(for snapshotID: String) -> Bool {
+        nodesCache[snapshotID] != nil
+    }
+
+    func cachedNodes(for snapshotID: String) -> [UINode]? {
+        nodesCache[snapshotID]
+    }
+
+    func cachedSnapshot(for snapshotID: String) -> Snapshot? {
+        snapshotCache[snapshotID]
+    }
+
+    func storeSnapshot(_ snapshot: Snapshot, for snapshotID: String) {
+        snapshotCache[snapshotID] = snapshot
+    }
+
+    func storeNodes(_ nodes: [UINode], for snapshotID: String) {
+        nodesCache[snapshotID] = nodes
+    }
+
     func frontmostFocusedElementRole() -> String? { focusedRoleOverride }
 
     func frontmostContainsText(_ text: String) -> Bool { false }
@@ -56,8 +78,17 @@ private final class MockAccessibilityService: AccessibilityServiceProtocol {
 }
 
 private final class MockScreenService: ScreenServiceProtocol {
+    var stubbedSnapshot: Snapshot?
+    var captureMainDisplayCalled = false
+
     func listDisplays() -> [DisplayInfo] { [] }
-    func captureMainDisplay(maxDimension: CoreGraphics.CGFloat) throws -> Snapshot { throw AutomationError.unavailable("mock") }
+    func captureMainDisplay(maxDimension: CoreGraphics.CGFloat) throws -> Snapshot {
+        captureMainDisplayCalled = true
+        if let snapshot = stubbedSnapshot {
+            return snapshot
+        }
+        throw AutomationError.unavailable("mock")
+    }
     func captureDisplay(displayID: UInt32, maxDimension: CoreGraphics.CGFloat) throws -> Snapshot { throw AutomationError.unavailable("mock") }
     func captureWindow(windowID: Int, maxDimension: CoreGraphics.CGFloat) throws -> Snapshot { throw AutomationError.unavailable("mock") }
 }
@@ -84,8 +115,13 @@ private final class MockOCRService: OCRServiceProtocol {
 }
 
 private final class MockUIQueryService: UIQueryServiceProtocol {
+    var stubbedNodes: [UINode]?
+
     func findNodes(in nodes: [UINode], predicate: UIElementPredicate) -> [UINode] {
-        nodes.filter { predicate.matches(node: $0) }
+        if let stubbed = stubbedNodes {
+            return stubbed
+        }
+        return nodes.filter { predicate.matches(node: $0) }
     }
 }
 
