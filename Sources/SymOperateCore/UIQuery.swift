@@ -72,7 +72,7 @@ public struct UIElementPredicate: Codable, Sendable {
     }
 }
 
-public struct UIQueryService {
+public struct UIQueryService: UIQueryServiceProtocol {
     public init() {}
 
     public func findNodes(in nodes: [UINode], predicate: UIElementPredicate) -> [UINode] {

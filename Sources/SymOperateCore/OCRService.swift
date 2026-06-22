@@ -25,7 +25,7 @@ public struct OCRResult: Codable, Sendable {
     }
 }
 
-public struct OCRService {
+public struct OCRService: OCRServiceProtocol {
     public init() {}
 
     /// Confidence threshold below which the fast pass is considered insufficient

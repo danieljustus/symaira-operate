@@ -2,7 +2,7 @@ import AppKit
 import ApplicationServices
 import Foundation
 
-public final class AccessibilityService {
+public final class AccessibilityService: AccessibilityServiceProtocol {
     public struct ResolvedElement {
         public let element: AXUIElement
         public let frame: RectValue?
@@ -51,45 +51,6 @@ public final class AccessibilityService {
 
     public func resolveElement(snapshotID: String, elementID: String) -> ResolvedElement? {
         elementCache[snapshotID]?[elementID]
-    }
-
-    /// Find the most specific (smallest-frame) cached element whose frame contains the given point.
-    /// Returns `nil` when no cached element matches — the caller should refuse the action.
-    public func resolveElementAtPoint(x: Double, y: Double) -> ResolvedElement? {
-        var bestMatch: ResolvedElement?
-        var bestArea: Double = .greatestFiniteMagnitude
-
-        for snapshotCache in elementCache.values {
-            for element in snapshotCache.values {
-                guard let frame = element.frame else { continue }
-                let minX = frame.x
-                let maxX = frame.x + frame.width
-                let minY = frame.y
-                let maxY = frame.y + frame.height
-                if x >= minX, x <= maxX, y >= minY, y <= maxY {
-                    let area = frame.width * frame.height
-                    if area < bestArea {
-                        bestArea = area
-                        bestMatch = element
-                    }
-                }
-            }
-        }
-        return bestMatch
-    }
-
-    public func prepopulateForTesting(snapshotID: String, elementID: String, role: String?, title: String?, label: String?, value: String?, frame: RectValue?) {
-        let element = AXUIElementCreateApplication(0)
-        let resolved = ResolvedElement(element: element, frame: frame, role: role, title: title, label: label, value: value)
-        elementCache[snapshotID] = [elementID: resolved]
-    }
-
-    public func frontmostFocusedElementRole() -> String? {
-        if let override = _testFocusedRoleOverride { return override }
-        guard AXIsProcessTrusted(), let app = NSWorkspace.shared.frontmostApplication else { return nil }
-        let axApp = AXUIElementCreateApplication(app.processIdentifier)
-        guard let focusedElement = axCopyElement(axApp, attribute: kAXFocusedUIElementAttribute) else { return nil }
-        return axCopyString(focusedElement, attribute: kAXRoleAttribute)
     }
 
     public func frontmostContainsText(_ text: String) -> Bool {

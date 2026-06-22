@@ -5,7 +5,7 @@ import Foundation
 import ImageIO
 @preconcurrency import ScreenCaptureKit
 
-public final class ScreenService {
+public final class ScreenService: ScreenServiceProtocol {
     private let fm = FileManager.default
     private let snapshotDirectory: URL
 

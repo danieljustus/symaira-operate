@@ -3,15 +3,34 @@ import CoreGraphics
 import Foundation
 
 public final class AutomationController {
-    private let permissions = PermissionService()
-    private let screen = ScreenService()
-    private let apps = AppService()
-    let accessibility = AccessibilityService()
-    private let input = InputService()
-    private let ocr = OCRService()
-    public var actionPolicy = ActionPolicy()
+    private let permissions: any PermissionServiceProtocol
+    private let screen: any ScreenServiceProtocol
+    private let apps: any AppServiceProtocol
+    let accessibility: any AccessibilityServiceProtocol
+    private let input: any InputServiceProtocol
+    private let ocr: any OCRServiceProtocol
+    private let queryService: any UIQueryServiceProtocol
+    public var actionPolicy: ActionPolicy
 
-    public init() {}
+    public init(
+        permissions: any PermissionServiceProtocol = PermissionService(),
+        screen: any ScreenServiceProtocol = ScreenService(),
+        apps: any AppServiceProtocol = AppService(),
+        accessibility: any AccessibilityServiceProtocol = AccessibilityService(),
+        input: any InputServiceProtocol = InputService(),
+        ocr: any OCRServiceProtocol = OCRService(),
+        queryService: any UIQueryServiceProtocol = UIQueryService(),
+        actionPolicy: ActionPolicy = ActionPolicy()
+    ) {
+        self.permissions = permissions
+        self.screen = screen
+        self.apps = apps
+        self.accessibility = accessibility
+        self.input = input
+        self.ocr = ocr
+        self.queryService = queryService
+        self.actionPolicy = actionPolicy
+    }
 
     public func permissionsStatus() -> PermissionSnapshot {
         permissions.status()
@@ -104,7 +123,6 @@ public final class AutomationController {
         } else {
             queryResult = try queryUI(maxDepth: maxDepth, maxNodes: maxNodes, displayID: displayID, windowID: windowID)
         }
-        let queryService = UIQueryService()
         let matched = queryService.findNodes(in: queryResult.nodes, predicate: predicate)
         return UIQueryResult(snapshot: queryResult.snapshot, app: queryResult.app, nodes: matched)
     }
@@ -153,7 +171,7 @@ public final class AutomationController {
     ) throws -> ActionResult {
         let start = try resolvePoint(snapshotID: snapshotID, elementID: fromElementID, x: fromX, y: fromY)
         let end = try resolvePoint(snapshotID: snapshotID, elementID: toElementID, x: toX, y: toY)
-        try input.drag(from: start, to: end)
+        try input.drag(from: start, to: end, steps: 24)
         return ActionResult(ok: true, message: "Dragged from (\(Int(start.x)), \(Int(start.y))) to (\(Int(end.x)), \(Int(end.y))).", snapshot: try? screen.captureMainDisplay())
     }
 
