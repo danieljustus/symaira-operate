@@ -179,16 +179,18 @@ final class SafetyPolicyTests: XCTestCase {
         let snapshotID = "test-snapshot"
         let toElementID = "remove-drag-target"
 
-        let frame = RectValue(x: 200, y: 200, width: 50, height: 30)
-        controller.accessibility.prepopulateForTesting(
-            snapshotID: snapshotID,
-            elementID: toElementID,
-            role: "AXButton",
-            title: "Remove",
-            label: nil,
-            value: nil,
-            frame: frame
-        )
+        controller.accessibility.elementCache[snapshotID] = [
+            toElementID: AccessibilityService.ResolvedElement(
+                element: AXUIElementCreateApplication(0),
+                frame: RectValue(x: 200, y: 200, width: 50, height: 30),
+                role: "AXButton", title: "Remove", label: nil, value: nil
+            ),
+            "safe-source": AccessibilityService.ResolvedElement(
+                element: AXUIElementCreateApplication(0),
+                frame: RectValue(x: 80, y: 80, width: 40, height: 40),
+                role: "AXButton", title: "OK", label: nil, value: nil
+            ),
+        ]
 
         do {
             _ = try controller.drag(
@@ -305,6 +307,198 @@ final class SafetyPolicyTests: XCTestCase {
                 }
             }
             XCTAssertFalse(shouldBlock, "Title '\(title)' should NOT be blocked")
+        }
+    }
+
+    // MARK: - Raw Coordinate Bypass Tests (Issue #31)
+
+    func testRawClickOnSecureTextFieldThrowsPermissionDenied() throws {
+        let snapshotID = "snap-secure"
+        let elementID = "secure-field"
+
+        let frame = RectValue(x: 100, y: 100, width: 200, height: 30)
+        controller.accessibility.prepopulateForTesting(
+            snapshotID: snapshotID,
+            elementID: elementID,
+            role: "AXSecureTextField",
+            title: nil,
+            label: "Password",
+            value: nil,
+            frame: frame
+        )
+
+        do {
+            _ = try controller.click(x: 150, y: 110)
+            XCTFail("Expected permissionDenied for raw-coord click on secure text field")
+        } catch let error as AutomationError {
+            if case .permissionDenied(let message) = error {
+                XCTAssertTrue(message.contains("secure text field"), "Expected secure field message, got: \(message)")
+            } else {
+                XCTFail("Expected permissionDenied, got \(error)")
+            }
+        }
+    }
+
+    func testRawClickOnDestructiveElementThrowsPermissionDenied() throws {
+        let snapshotID = "snap-delete"
+        let elementID = "delete-btn"
+
+        let frame = RectValue(x: 50, y: 50, width: 80, height: 40)
+        controller.accessibility.prepopulateForTesting(
+            snapshotID: snapshotID,
+            elementID: elementID,
+            role: "AXButton",
+            title: "Delete",
+            label: nil,
+            value: nil,
+            frame: frame
+        )
+
+        do {
+            _ = try controller.click(x: 80, y: 65)
+            XCTFail("Expected permissionDenied for raw-coord click on destructive element")
+        } catch let error as AutomationError {
+            if case .permissionDenied(let message) = error {
+                XCTAssertTrue(message.contains("destructive"), "Expected destructive message, got: \(message)")
+            } else {
+                XCTFail("Expected permissionDenied, got \(error)")
+            }
+        }
+    }
+
+    func testRawClickOnUnknownElementThrowsPermissionDenied() throws {
+        do {
+            _ = try controller.click(x: 999, y: 999)
+            XCTFail("Expected permissionDenied for raw-coord click with no cached element")
+        } catch let error as AutomationError {
+            if case .permissionDenied(let message) = error {
+                XCTAssertTrue(message.contains("Cannot identify"), "Expected identification failure, got: \(message)")
+            } else {
+                XCTFail("Expected permissionDenied, got \(error)")
+            }
+        }
+    }
+
+    func testRawClickOnSafeElementDoesNotThrowPermissionDenied() throws {
+        let snapshotID = "snap-save"
+        let elementID = "save-btn"
+
+        let frame = RectValue(x: 10, y: 10, width: 60, height: 30)
+        controller.accessibility.prepopulateForTesting(
+            snapshotID: snapshotID,
+            elementID: elementID,
+            role: "AXButton",
+            title: "Save",
+            label: nil,
+            value: nil,
+            frame: frame
+        )
+
+        let resolved = controller.accessibility.resolveElementAtPoint(x: 30, y: 20)
+        XCTAssertNotNil(resolved, "Should find the safe element at (30, 20)")
+
+        if let resolved {
+            XCTAssertFalse(
+                controller.actionPolicy.isDestructive(role: resolved.role, title: resolved.title, label: resolved.label, value: resolved.value),
+                "Safe element 'Save' should not be flagged as destructive"
+            )
+            XCTAssertNotEqual(resolved.role, "AXSecureTextField", "Safe element should not be a secure text field")
+        }
+    }
+
+    func testRawDragFromDestructiveElementThrowsPermissionDenied() throws {
+        let snapshotID = "snap-drag-del"
+        let elementID = "delete-drag"
+
+        let frame = RectValue(x: 100, y: 100, width: 50, height: 30)
+        controller.accessibility.prepopulateForTesting(
+            snapshotID: snapshotID,
+            elementID: elementID,
+            role: "AXButton",
+            title: "Delete",
+            label: nil,
+            value: nil,
+            frame: frame
+        )
+
+        do {
+            _ = try controller.drag(fromX: 110, fromY: 110, toX: 300, toY: 300)
+            XCTFail("Expected permissionDenied for raw-coord drag from destructive element")
+        } catch let error as AutomationError {
+            if case .permissionDenied(let message) = error {
+                XCTAssertTrue(message.contains("destructive"), "Expected destructive message, got: \(message)")
+            } else {
+                XCTFail("Expected permissionDenied, got \(error)")
+            }
+        }
+    }
+
+    func testRawDragToSecureTextFieldThrowsPermissionDenied() throws {
+        let snapshotID = "snap-drag-sec"
+        let sourceElementID = "safe-source"
+        let targetElementID = "secure-target"
+
+        let sourceFrame = RectValue(x: 40, y: 40, width: 30, height: 30)
+        let targetFrame = RectValue(x: 300, y: 300, width: 200, height: 30)
+
+        controller.accessibility.elementCache[snapshotID] = [
+            sourceElementID: AccessibilityService.ResolvedElement(
+                element: AXUIElementCreateApplication(0),
+                frame: sourceFrame, role: "AXButton",
+                title: "OK", label: nil, value: nil
+            ),
+            targetElementID: AccessibilityService.ResolvedElement(
+                element: AXUIElementCreateApplication(0),
+                frame: targetFrame, role: "AXSecureTextField",
+                title: nil, label: "PIN", value: nil
+            ),
+        ]
+
+        do {
+            _ = try controller.drag(
+                snapshotID: snapshotID,
+                fromElementID: sourceElementID,
+                toX: 350,
+                toY: 310
+            )
+            XCTFail("Expected permissionDenied for raw-coord drag to secure text field")
+        } catch let error as AutomationError {
+            if case .permissionDenied(let message) = error {
+                XCTAssertTrue(message.contains("secure text field"), "Expected secure field message, got: \(message)")
+            } else {
+                XCTFail("Expected permissionDenied, got \(error)")
+            }
+        }
+    }
+
+    func testResolveElementAtPointFindsCachedElement() {
+        let service = AccessibilityService()
+        let element = AXUIElementCreateApplication(0)
+        service.elementCache["snap"] = [
+            "btn": AccessibilityService.ResolvedElement(
+                element: element,
+                frame: RectValue(x: 100, y: 100, width: 50, height: 30),
+                role: "AXButton", title: "OK", label: nil, value: nil
+            )
+        ]
+
+        let found = service.resolveElementAtPoint(x: 120, y: 110)
+        XCTAssertNotNil(found, "Should find element at point inside its frame")
+
+        let missed = service.resolveElementAtPoint(x: 999, y: 999)
+        XCTAssertNil(missed, "Should return nil for point outside all frames")
+    }
+
+    func testRawDragToUnknownElementThrowsPermissionDenied() throws {
+        do {
+            _ = try controller.drag(fromX: 50, fromY: 50, toX: 999, toY: 999)
+            XCTFail("Expected permissionDenied for raw-coord drag to unknown element")
+        } catch let error as AutomationError {
+            if case .permissionDenied(let message) = error {
+                XCTAssertTrue(message.contains("Cannot identify"), "Expected identification failure, got: \(message)")
+            } else {
+                XCTFail("Expected permissionDenied, got \(error)")
+            }
         }
     }
 }

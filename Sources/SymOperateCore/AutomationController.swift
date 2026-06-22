@@ -212,7 +212,16 @@ public final class AutomationController {
         }
 
         if let x, let y {
-            return PointValue(x: x, y: y)
+            if let resolved = accessibility.resolveElementAtPoint(x: x, y: y) {
+                if let role = resolved.role, role == "AXSecureTextField" {
+                    throw AutomationError.permissionDenied("Refusing to target a secure text field via raw coordinates.")
+                }
+                if actionPolicy.isDestructive(role: resolved.role, title: resolved.title, label: resolved.label, value: resolved.value) {
+                    throw AutomationError.permissionDenied("Refusing to target a potentially destructive UI element via raw coordinates.")
+                }
+                return PointValue(x: x, y: y)
+            }
+            throw AutomationError.permissionDenied("Cannot identify the element at the given coordinates. Use snapshot_id + element_id instead, or take a snapshot first to enable coordinate-based targeting.")
         }
 
         throw AutomationError.invalidArgument("Provide either x/y coordinates or snapshot_id + element_id.")
