@@ -5,6 +5,7 @@ import XCTest
 
 private final class MockAccessibilityService: AccessibilityServiceProtocol {
     private var elements: [String: [String: AccessibilityService.ResolvedElement]] = [:]
+    var focusedRoleOverride: String?
 
     func prepopulate(snapshotID: String, elementID: String, role: String?, title: String?, label: String?, value: String?, frame: RectValue?) {
         let element = AXUIElementCreateApplication(0)
@@ -12,11 +13,42 @@ private final class MockAccessibilityService: AccessibilityServiceProtocol {
         elements[snapshotID, default: [:]][elementID] = resolved
     }
 
+    func prepopulateMany(snapshotID: String, elements: [String: AccessibilityService.ResolvedElement]) {
+        for (elementID, resolved) in elements {
+            self.elements[snapshotID, default: [:]][elementID] = resolved
+        }
+    }
+
     func queryFrontmostUI(snapshotID: String, maxDepth: Int, maxNodes: Int) throws -> [UINode] { [] }
 
     func resolveElement(snapshotID: String, elementID: String) -> AccessibilityService.ResolvedElement? {
         elements[snapshotID]?[elementID]
     }
+
+    func resolveElementAtPoint(x: Double, y: Double) -> AccessibilityService.ResolvedElement? {
+        var bestMatch: AccessibilityService.ResolvedElement?
+        var bestArea: Double = .greatestFiniteMagnitude
+
+        for snapshotCache in elements.values {
+            for element in snapshotCache.values {
+                guard let frame = element.frame else { continue }
+                let minX = frame.x
+                let maxX = frame.x + frame.width
+                let minY = frame.y
+                let maxY = frame.y + frame.height
+                if x >= minX, x <= maxX, y >= minY, y <= maxY {
+                    let area = frame.width * frame.height
+                    if area < bestArea {
+                        bestArea = area
+                        bestMatch = element
+                    }
+                }
+            }
+        }
+        return bestMatch
+    }
+
+    func frontmostFocusedElementRole() -> String? { focusedRoleOverride }
 
     func frontmostContainsText(_ text: String) -> Bool { false }
 
@@ -85,7 +117,7 @@ final class SafetyPolicyTests: XCTestCase {
     }
 
     override func tearDown() {
-        controller.accessibility._testFocusedRoleOverride = nil
+        mockAX.focusedRoleOverride = nil
         controller = nil
         mockAX = nil
         super.tearDown()
@@ -255,15 +287,20 @@ final class SafetyPolicyTests: XCTestCase {
         let snapshotID = "test-snapshot"
         let toElementID = "remove-drag-target"
 
-        let frame = RectValue(x: 200, y: 200, width: 50, height: 30)
-        mockAX.prepopulate(
+        mockAX.prepopulateMany(
             snapshotID: snapshotID,
-            elementID: toElementID,
-            role: "AXButton",
-            title: "Remove",
-            label: nil,
-            value: nil,
-            frame: frame
+            elements: [
+                toElementID: AccessibilityService.ResolvedElement(
+                    element: AXUIElementCreateApplication(0),
+                    frame: RectValue(x: 200, y: 200, width: 50, height: 30),
+                    role: "AXButton", title: "Remove", label: nil, value: nil
+                ),
+                "safe-source": AccessibilityService.ResolvedElement(
+                    element: AXUIElementCreateApplication(0),
+                    frame: RectValue(x: 80, y: 80, width: 40, height: 40),
+                    role: "AXButton", title: "OK", label: nil, value: nil
+                ),
+            ]
         )
 
         do {
@@ -387,7 +424,7 @@ final class SafetyPolicyTests: XCTestCase {
     // MARK: - Secure Field Tests (type_text / press_keys)
 
     func testTypeTextIntoSecureFieldThrowsPermissionDenied() throws {
-        controller.accessibility._testFocusedRoleOverride = "AXSecureTextField"
+        mockAX.focusedRoleOverride = "AXSecureTextField"
 
         do {
             _ = try controller.typeText("secret")
@@ -404,7 +441,7 @@ final class SafetyPolicyTests: XCTestCase {
     }
 
     func testPressKeysIntoSecureFieldThrowsPermissionDenied() throws {
-        controller.accessibility._testFocusedRoleOverride = "AXSecureTextField"
+        mockAX.focusedRoleOverride = "AXSecureTextField"
 
         do {
             _ = try controller.pressKeys(["a"])
@@ -421,7 +458,7 @@ final class SafetyPolicyTests: XCTestCase {
     }
 
     func testTypeTextDoesNotThrowWhenFocusedElementIsNotSecure() throws {
-        controller.accessibility._testFocusedRoleOverride = "AXTextField"
+        mockAX.focusedRoleOverride = "AXTextField"
 
         do {
             _ = try controller.typeText("hello")
@@ -433,7 +470,7 @@ final class SafetyPolicyTests: XCTestCase {
     }
 
     func testPressKeysDoesNotThrowWhenFocusedElementIsNotSecure() throws {
-        controller.accessibility._testFocusedRoleOverride = "AXTextField"
+        mockAX.focusedRoleOverride = "AXTextField"
 
         do {
             _ = try controller.pressKeys(["a"])
@@ -461,7 +498,7 @@ final class SafetyPolicyTests: XCTestCase {
         let elementID = "secure-field"
 
         let frame = RectValue(x: 100, y: 100, width: 200, height: 30)
-        controller.accessibility.prepopulateForTesting(
+        mockAX.prepopulate(
             snapshotID: snapshotID,
             elementID: elementID,
             role: "AXSecureTextField",
@@ -488,7 +525,7 @@ final class SafetyPolicyTests: XCTestCase {
         let elementID = "delete-btn"
 
         let frame = RectValue(x: 50, y: 50, width: 80, height: 40)
-        controller.accessibility.prepopulateForTesting(
+        mockAX.prepopulate(
             snapshotID: snapshotID,
             elementID: elementID,
             role: "AXButton",
@@ -528,7 +565,7 @@ final class SafetyPolicyTests: XCTestCase {
         let elementID = "save-btn"
 
         let frame = RectValue(x: 10, y: 10, width: 60, height: 30)
-        controller.accessibility.prepopulateForTesting(
+        mockAX.prepopulate(
             snapshotID: snapshotID,
             elementID: elementID,
             role: "AXButton",
@@ -538,7 +575,7 @@ final class SafetyPolicyTests: XCTestCase {
             frame: frame
         )
 
-        let resolved = controller.accessibility.resolveElementAtPoint(x: 30, y: 20)
+        let resolved = mockAX.resolveElementAtPoint(x: 30, y: 20)
         XCTAssertNotNil(resolved, "Should find the safe element at (30, 20)")
 
         if let resolved {
@@ -555,7 +592,7 @@ final class SafetyPolicyTests: XCTestCase {
         let elementID = "delete-drag"
 
         let frame = RectValue(x: 100, y: 100, width: 50, height: 30)
-        controller.accessibility.prepopulateForTesting(
+        mockAX.prepopulate(
             snapshotID: snapshotID,
             elementID: elementID,
             role: "AXButton",
@@ -585,7 +622,7 @@ final class SafetyPolicyTests: XCTestCase {
         let sourceFrame = RectValue(x: 40, y: 40, width: 30, height: 30)
         let targetFrame = RectValue(x: 300, y: 300, width: 200, height: 30)
 
-        controller.accessibility.elementCache[snapshotID] = [
+        mockAX.prepopulateMany(snapshotID: snapshotID, elements: [
             sourceElementID: AccessibilityService.ResolvedElement(
                 element: AXUIElementCreateApplication(0),
                 frame: sourceFrame, role: "AXButton",
@@ -596,7 +633,7 @@ final class SafetyPolicyTests: XCTestCase {
                 frame: targetFrame, role: "AXSecureTextField",
                 title: nil, label: "PIN", value: nil
             ),
-        ]
+        ])
 
         do {
             _ = try controller.drag(

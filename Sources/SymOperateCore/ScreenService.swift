@@ -56,25 +56,25 @@ public final class ScreenService: ScreenServiceProtocol {
         return displays
     }
 
-    public func captureMainDisplay(maxDimension: CGFloat = 1280, saveDebugImage: Bool = false) throws -> Snapshot {
+    public func captureMainDisplay(maxDimension: CGFloat) throws -> Snapshot {
         try capture(
             displayID: CGMainDisplayID(),
             bounds: CGDisplayBounds(CGMainDisplayID()),
             maxDimension: maxDimension,
-            saveDebugImage: saveDebugImage
+            saveDebugImage: false
         )
     }
 
-    public func captureDisplay(displayID: UInt32, maxDimension: CGFloat = 1280, saveDebugImage: Bool = false) throws -> Snapshot {
+    public func captureDisplay(displayID: UInt32, maxDimension: CGFloat) throws -> Snapshot {
         try capture(
             displayID: displayID,
             bounds: CGDisplayBounds(displayID),
             maxDimension: maxDimension,
-            saveDebugImage: saveDebugImage
+            saveDebugImage: false
         )
     }
 
-    public func captureWindow(windowID: Int, maxDimension: CGFloat = 1280, saveDebugImage: Bool = false) throws -> Snapshot {
+    public func captureWindow(windowID: Int, maxDimension: CGFloat) throws -> Snapshot {
         let windowBoundsRect = windowBounds(for: windowID)
         let displayID = CGMainDisplayID()
         return try capture(
@@ -82,7 +82,7 @@ public final class ScreenService: ScreenServiceProtocol {
             bounds: windowBoundsRect,
             maxDimension: maxDimension,
             windowID: windowID,
-            saveDebugImage: saveDebugImage
+            saveDebugImage: false
         )
     }
 

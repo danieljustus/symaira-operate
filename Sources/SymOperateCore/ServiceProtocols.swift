@@ -33,6 +33,8 @@ extension ScreenServiceProtocol {
 public protocol AccessibilityServiceProtocol {
     func queryFrontmostUI(snapshotID: String, maxDepth: Int, maxNodes: Int) throws -> [UINode]
     func resolveElement(snapshotID: String, elementID: String) -> AccessibilityService.ResolvedElement?
+    func resolveElementAtPoint(x: Double, y: Double) -> AccessibilityService.ResolvedElement?
+    func frontmostFocusedElementRole() -> String?
     func frontmostContainsText(_ text: String) -> Bool
     func performMenuAction(path: [String]) throws
 }
