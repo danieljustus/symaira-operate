@@ -9,6 +9,10 @@ enum Command: String {
     case version
 }
 
+private struct GrantResult: Codable {
+    let prompted: Bool
+}
+
 let controller = AutomationController()
 
 func printUsage() {
@@ -48,6 +52,11 @@ func exitCode(for error: AutomationError) -> ExitCode {
 do {
     let args = Array(CommandLine.arguments.dropFirst())
     guard let first = args.first else {
+        printUsage()
+        exit(ExitCode.ok.rawValue)
+    }
+
+    if first == "--help" || first == "-h" {
         printUsage()
         exit(ExitCode.ok.rawValue)
     }
@@ -169,7 +178,7 @@ do {
             default:
                 throw AutomationError.invalidArgument("Unknown permission target '\(target)'.")
             }
-            FileHandle.standardOutput.write(Data("prompt_result=\(success)\n".utf8))
+            try printJSON(GrantResult(prompted: success))
         default:
             throw AutomationError.invalidArgument("Unknown permissions subcommand '\(subcommand)'.")
         }
