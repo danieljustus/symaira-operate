@@ -126,11 +126,13 @@ public final class AutomationController {
         guard !text.isEmpty else {
             throw AutomationError.invalidArgument("type_text requires a non-empty text argument.")
         }
+        try guardAgainstSecureField()
         try input.typeText(text)
         return ActionResult(ok: true, message: "Typed \(text.count) characters.", snapshot: try? screen.captureMainDisplay())
     }
 
     public func pressKeys(_ keys: [String]) throws -> ActionResult {
+        try guardAgainstSecureField()
         try input.pressKeys(keys)
         return ActionResult(ok: true, message: "Pressed keys: \(keys.joined(separator: "+")).", snapshot: try? screen.captureMainDisplay())
     }
@@ -190,6 +192,12 @@ public final class AutomationController {
         }
 
         throw AutomationError.operationFailed("Condition was not met within \(timeoutSeconds) seconds.")
+    }
+
+    private func guardAgainstSecureField() throws {
+        if let role = accessibility.frontmostFocusedElementRole(), role == "AXSecureTextField" {
+            throw AutomationError.permissionDenied("Refusing to type into a secure text field.")
+        }
     }
 
     private func resolvePoint(snapshotID: String?, elementID: String?, x: Double?, y: Double?) throws -> PointValue {

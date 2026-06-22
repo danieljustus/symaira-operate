@@ -11,6 +11,7 @@ final class SafetyPolicyTests: XCTestCase {
     }
 
     override func tearDown() {
+        controller.accessibility._testFocusedRoleOverride = nil
         controller = nil
         super.tearDown()
     }
@@ -307,6 +308,76 @@ final class SafetyPolicyTests: XCTestCase {
                 }
             }
             XCTAssertFalse(shouldBlock, "Title '\(title)' should NOT be blocked")
+        }
+    }
+
+    // MARK: - Secure Field Tests (type_text / press_keys)
+
+    func testTypeTextIntoSecureFieldThrowsPermissionDenied() throws {
+        controller.accessibility._testFocusedRoleOverride = "AXSecureTextField"
+
+        do {
+            _ = try controller.typeText("secret")
+            XCTFail("Expected permissionDenied error when typing into a secure text field")
+        } catch let error as AutomationError {
+            if case .permissionDenied(let message) = error {
+                XCTAssertTrue(message.contains("secure text field"), "Error message should mention secure text field, got: \(message)")
+            } else {
+                XCTFail("Expected permissionDenied error, got \(error)")
+            }
+        } catch {
+            XCTFail("Expected AutomationError, got \(error)")
+        }
+    }
+
+    func testPressKeysIntoSecureFieldThrowsPermissionDenied() throws {
+        controller.accessibility._testFocusedRoleOverride = "AXSecureTextField"
+
+        do {
+            _ = try controller.pressKeys(["a"])
+            XCTFail("Expected permissionDenied error when pressing keys into a secure text field")
+        } catch let error as AutomationError {
+            if case .permissionDenied(let message) = error {
+                XCTAssertTrue(message.contains("secure text field"), "Error message should mention secure text field, got: \(message)")
+            } else {
+                XCTFail("Expected permissionDenied error, got \(error)")
+            }
+        } catch {
+            XCTFail("Expected AutomationError, got \(error)")
+        }
+    }
+
+    func testTypeTextDoesNotThrowWhenFocusedElementIsNotSecure() throws {
+        controller.accessibility._testFocusedRoleOverride = "AXTextField"
+
+        do {
+            _ = try controller.typeText("hello")
+        } catch let error as AutomationError {
+            if case .permissionDenied(let message) = error, message.contains("secure text field") {
+                XCTFail("typeText should not be blocked for a non-secure focused field, got: \(message)")
+            }
+        }
+    }
+
+    func testPressKeysDoesNotThrowWhenFocusedElementIsNotSecure() throws {
+        controller.accessibility._testFocusedRoleOverride = "AXTextField"
+
+        do {
+            _ = try controller.pressKeys(["a"])
+        } catch let error as AutomationError {
+            if case .permissionDenied(let message) = error, message.contains("secure text field") {
+                XCTFail("pressKeys should not be blocked for a non-secure focused field, got: \(message)")
+            }
+        }
+    }
+
+    func testTypeTextDoesNotThrowWhenNoFocusedElement() throws {
+        do {
+            _ = try controller.typeText("hello")
+        } catch let error as AutomationError {
+            if case .permissionDenied(let message) = error, message.contains("secure text field") {
+                XCTFail("typeText should not be blocked when no focused element role is available")
+            }
         }
     }
 
