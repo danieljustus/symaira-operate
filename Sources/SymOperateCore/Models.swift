@@ -89,7 +89,7 @@ public struct Snapshot: Codable, Sendable {
     public let imageSize: SizeValue
     public let displayBounds: RectValue
     public let displayID: UInt32
-    public let debugImagePath: String
+    public let debugImagePath: String?
     public let transform: SnapshotTransform
 
     public init(
@@ -99,7 +99,7 @@ public struct Snapshot: Codable, Sendable {
         imageSize: SizeValue,
         displayBounds: RectValue,
         displayID: UInt32,
-        debugImagePath: String,
+        debugImagePath: String? = nil,
         transform: SnapshotTransform
     ) {
         self.id = id
@@ -110,6 +110,36 @@ public struct Snapshot: Codable, Sendable {
         self.displayID = displayID
         self.debugImagePath = debugImagePath
         self.transform = transform
+    }
+
+    // MARK: - Codable (encodeIfPresent prevents local path leakage to MCP clients)
+
+    private enum CodingKeys: String, CodingKey {
+        case id, createdAt, imageBase64PNG, imageSize, displayBounds, displayID, debugImagePath, transform
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(imageBase64PNG, forKey: .imageBase64PNG)
+        try container.encode(imageSize, forKey: .imageSize)
+        try container.encode(displayBounds, forKey: .displayBounds)
+        try container.encode(displayID, forKey: .displayID)
+        try container.encodeIfPresent(debugImagePath, forKey: .debugImagePath)
+        try container.encode(transform, forKey: .transform)
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        createdAt = try container.decode(String.self, forKey: .createdAt)
+        imageBase64PNG = try container.decode(String.self, forKey: .imageBase64PNG)
+        imageSize = try container.decode(SizeValue.self, forKey: .imageSize)
+        displayBounds = try container.decode(RectValue.self, forKey: .displayBounds)
+        displayID = try container.decode(UInt32.self, forKey: .displayID)
+        debugImagePath = try container.decodeIfPresent(String.self, forKey: .debugImagePath)
+        transform = try container.decode(SnapshotTransform.self, forKey: .transform)
     }
 }
 
