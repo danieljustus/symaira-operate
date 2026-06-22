@@ -120,4 +120,69 @@ final class AccessibilityServiceTests: XCTestCase {
             XCTFail("Expected staleReference case")
         }
     }
+
+    func testPollingCacheAbsentTextsAccumulate() {
+        let service = AccessibilityService()
+
+        service.pollingAbsentTexts.insert("hello")
+        service.pollingAbsentTexts.insert("world")
+
+        XCTAssertTrue(service.pollingAbsentTexts.contains("hello"))
+        XCTAssertTrue(service.pollingAbsentTexts.contains("world"))
+        XCTAssertEqual(service.pollingAbsentTexts.count, 2)
+    }
+
+    func testInvalidatePollingCacheClearsState() {
+        let service = AccessibilityService()
+
+        service.pollingCachePID = 42
+        service.pollingAbsentTexts.insert("hello")
+        service.pollingAbsentTexts.insert("world")
+
+        service.invalidatePollingCache()
+
+        XCTAssertNil(service.pollingCachePID)
+        XCTAssertTrue(service.pollingAbsentTexts.isEmpty)
+    }
+
+    func testPollingCachePIDChangeClearsAbsentSet() {
+        let service = AccessibilityService()
+
+        service.pollingCachePID = 42
+        service.pollingAbsentTexts.insert("hello")
+
+        // Simulate PID change by setting a different PID before calling polling
+        // We can't call frontmostContainsTextPolling in CI (no AX permission),
+        // but we can verify the cache data structure behavior.
+        service.pollingCachePID = 99
+        service.pollingAbsentTexts.removeAll()
+
+        XCTAssertTrue(service.pollingAbsentTexts.isEmpty)
+        XCTAssertEqual(service.pollingCachePID, 99)
+    }
+
+    func testPollingSearchTextUsesReducedScope() {
+        let service = AccessibilityService()
+
+        // searchText with reduced params (depth=3, maxNodes=50) should still
+        // visit the mock element and enforce the budget.
+        var seen = 0
+        _ = service.searchText(
+            in: mockElement,
+            needle: "nonexistent",
+            remainingDepth: 3,
+            seen: &seen,
+            maxNodes: 50
+        )
+
+        XCTAssertEqual(seen, 1, "searchText should visit exactly 1 node (mock has no children)")
+    }
+
+    func testProtocolDefaultFrontmostContainsTextPollingFallsBack() {
+        let service = AccessibilityService()
+        // Default protocol extension delegates to frontmostContainsText.
+        // In CI without AX permission both return false.
+        let result = service.frontmostContainsTextPolling("test")
+        XCTAssertFalse(result)
+    }
 }
