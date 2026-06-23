@@ -17,7 +17,7 @@ public final class AccessibilityService: AccessibilityServiceProtocol {
     internal var snapshotCache: [String: Snapshot] = [:]
     internal var cacheOrder: [String] = []
     private let maxCacheSnapshots = 20
-    internal var _testFocusedRoleOverride: String?
+    internal var testFocusedRoleOverride: String?
 
     // Polling cache: avoids full AX walks when the frontmost PID hasn't changed
     // and we already confirmed the text is absent.
@@ -105,7 +105,7 @@ public final class AccessibilityService: AccessibilityServiceProtocol {
     }
 
     public func frontmostFocusedElementRole() -> String? {
-        if let override = _testFocusedRoleOverride { return override }
+        if let override = testFocusedRoleOverride { return override }
         guard AXIsProcessTrusted(), let app = NSWorkspace.shared.frontmostApplication else { return nil }
         let axApp = AXUIElementCreateApplication(app.processIdentifier)
         guard let focusedElement = axCopyElement(axApp, attribute: kAXFocusedUIElementAttribute) else { return nil }

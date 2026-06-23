@@ -452,47 +452,50 @@ public final class MCPServer {
         return data
     }
 
-    private func string(_ value: Any?) -> String? { value as? String }
+}
 
-    private func double(_ value: Any?) -> Double? {
+private extension MCPServer {
+    func string(_ value: Any?) -> String? { value as? String }
+
+    func double(_ value: Any?) -> Double? {
         if let n = value as? NSNumber { return n.doubleValue }
         return (value as? String).flatMap(Double.init)
     }
 
-    private func uint32(_ value: Any?) -> UInt32? {
+    func uint32(_ value: Any?) -> UInt32? {
         if let n = value as? NSNumber { return n.uint32Value }
         return (value as? String).flatMap(UInt32.init)
     }
 
-    private func intOptional(_ value: Any?) -> Int? {
+    func intOptional(_ value: Any?) -> Int? {
         if let n = value as? NSNumber { return n.intValue }
         return (value as? String).flatMap(Int.init)
     }
 
-    private func int(_ value: Any?, default defaultValue: Int) -> Int {
+    func int(_ value: Any?, default defaultValue: Int) -> Int {
         intOptional(value) ?? defaultValue
     }
 
-    private func bool(_ value: Any?, default defaultValue: Bool) -> Bool {
+    func bool(_ value: Any?, default defaultValue: Bool) -> Bool {
         if let b = value as? Bool { return b }
         return (value as? NSNumber)?.boolValue ?? defaultValue
     }
 
-    private func requireString(_ value: Any?, name: String) throws -> String {
+    func requireString(_ value: Any?, name: String) throws -> String {
         guard let string = value as? String, !string.isEmpty else {
             throw AutomationError.invalidArgument("Missing required string argument '\(name)'.")
         }
         return string
     }
 
-    private func requireDouble(_ value: Any?, name: String) throws -> Double {
+    func requireDouble(_ value: Any?, name: String) throws -> Double {
         guard let double = double(value) else {
             throw AutomationError.invalidArgument("Missing required numeric argument '\(name)'.")
         }
         return double
     }
 
-    private func requireStringArray(_ value: Any?, name: String) throws -> [String] {
+    func requireStringArray(_ value: Any?, name: String) throws -> [String] {
         guard let array = value as? [String], !array.isEmpty else {
             throw AutomationError.invalidArgument("Missing required string array argument '\(name)'.")
         }

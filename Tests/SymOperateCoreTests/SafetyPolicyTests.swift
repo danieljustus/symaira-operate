@@ -457,6 +457,9 @@ final class SafetyPolicyTests: XCTestCase {
         }
     }
 
+}
+
+extension SafetyPolicyTests {
     // MARK: - Secure Field Tests (type_text / press_keys)
 
     func testTypeTextIntoSecureFieldThrowsPermissionDenied() throws {

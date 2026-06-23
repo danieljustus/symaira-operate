@@ -17,7 +17,13 @@ final class CLITests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func run(_ arguments: [String]) -> (stdout: String, stderr: String, status: Int32) {
+    private struct RunResult {
+        let stdout: String
+        let stderr: String
+        let status: Int32
+    }
+
+    private func run(_ arguments: [String]) -> RunResult {
         let process = Process()
         process.executableURL = binary
         process.arguments = arguments
@@ -32,7 +38,7 @@ final class CLITests: XCTestCase {
 
         let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
         let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-        return (
+        return RunResult(
             stdout: String(data: outData, encoding: .utf8) ?? "",
             stderr: String(data: errData, encoding: .utf8) ?? "",
             status: process.terminationStatus
