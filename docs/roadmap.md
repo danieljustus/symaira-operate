@@ -2,7 +2,7 @@
 
 ## v0.1 (current)
 
-- [x] Rebrand from `mac-operator` to Symaira conventions; builds, 29 tests pass.
+- [x] Rebrand from `mac-operator` to Symaira conventions; builds, 106 tests pass.
 - [x] MCP tools: snapshot, query_ui, list_apps, list_windows, click, type_text,
       press_keys, scroll, drag, launch_app, focus_window, menu_action, wait_for,
       permissions_status.
