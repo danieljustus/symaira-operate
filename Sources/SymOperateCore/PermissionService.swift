@@ -2,7 +2,7 @@ import ApplicationServices
 import CoreGraphics
 import Foundation
 
-public struct PermissionService {
+public struct PermissionService: PermissionServiceProtocol {
     public init() {}
 
     public func status() -> PermissionSnapshot {

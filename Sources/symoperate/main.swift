@@ -9,6 +9,10 @@ enum Command: String {
     case version
 }
 
+private struct GrantResult: Codable {
+    let prompted: Bool
+}
+
 let controller = AutomationController()
 
 func printUsage() {
@@ -52,6 +56,11 @@ do {
         exit(ExitCode.ok.rawValue)
     }
 
+    if first == "--help" || first == "-h" {
+        printUsage()
+        exit(ExitCode.ok.rawValue)
+    }
+
     switch first {
     case Command.serve.rawValue:
         Task { @Sendable in
@@ -64,20 +73,26 @@ do {
         }
         dispatchMain()
     case Command.version.rawValue:
-        let checker = UpdateChecker()
-        let update = checker.checkForUpdate()
-        struct VersionReport: Codable {
-            let version: String
-            let updateAvailable: Bool
-            let latestVersion: String?
-            let releaseURL: String?
+        Task { @Sendable in
+            let checker = UpdateChecker()
+            let update = await checker.checkForUpdate()
+            struct VersionReport: Codable {
+                let version: String
+                let updateAvailable: Bool
+                let latestVersion: String?
+                let releaseURL: String?
+                let error: String?
+            }
+            try? printJSON(VersionReport(
+                version: SymOperateVersion.current,
+                updateAvailable: update.updateAvailable,
+                latestVersion: update.latestVersion,
+                releaseURL: update.releaseURL,
+                error: update.error
+            ))
+            exit(0)
         }
-        try printJSON(VersionReport(
-            version: SymOperateVersion.current,
-            updateAvailable: update.updateAvailable,
-            latestVersion: update.latestVersion,
-            releaseURL: update.releaseURL
-        ))
+        dispatchMain()
     case Command.doctor.rawValue:
         let permissions = controller.permissionsStatus()
         let apps = controller.listApps()
@@ -169,7 +184,7 @@ do {
             default:
                 throw AutomationError.invalidArgument("Unknown permission target '\(target)'.")
             }
-            FileHandle.standardOutput.write(Data("prompt_result=\(success)\n".utf8))
+            try printJSON(GrantResult(prompted: success))
         default:
             throw AutomationError.invalidArgument("Unknown permissions subcommand '\(subcommand)'.")
         }

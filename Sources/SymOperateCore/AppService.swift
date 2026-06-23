@@ -2,7 +2,7 @@ import AppKit
 import CoreGraphics
 import Foundation
 
-public struct AppService {
+public struct AppService: AppServiceProtocol {
     public init() {}
 
     public func listApps() -> [AppInfo] {

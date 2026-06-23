@@ -2,7 +2,7 @@ import AppKit
 import ApplicationServices
 import Foundation
 
-public final class AccessibilityService {
+public final class AccessibilityService: AccessibilityServiceProtocol {
     public struct ResolvedElement {
         public let element: AXUIElement
         public let frame: RectValue?
@@ -13,8 +13,16 @@ public final class AccessibilityService {
     }
 
     internal var elementCache: [String: [String: ResolvedElement]] = [:]
+    internal var nodesCache: [String: [UINode]] = [:]
+    internal var snapshotCache: [String: Snapshot] = [:]
     internal var cacheOrder: [String] = []
     private let maxCacheSnapshots = 20
+    internal var testFocusedRoleOverride: String?
+
+    // Polling cache: avoids full AX walks when the frontmost PID hasn't changed
+    // and we already confirmed the text is absent.
+    internal var pollingCachePID: pid_t?
+    internal var pollingAbsentTexts: Set<String> = []
 
     public init() {}
 
@@ -25,6 +33,8 @@ public final class AccessibilityService {
         cacheOrder.removeFirst(removeCount)
         for snapshotID in toRemove {
             elementCache.removeValue(forKey: snapshotID)
+            nodesCache.removeValue(forKey: snapshotID)
+            snapshotCache.removeValue(forKey: snapshotID)
         }
     }
 
@@ -44,6 +54,7 @@ public final class AccessibilityService {
         let nodes = roots.compactMap { buildNode(element: $0, depth: 0, maxDepth: maxDepth, remainingNodes: &remaining, cache: &cache) }
         evictIfNeeded()
         elementCache[snapshotID] = cache
+        nodesCache[snapshotID] = nodes
         cacheOrder.append(snapshotID)
         return nodes
     }
@@ -52,10 +63,53 @@ public final class AccessibilityService {
         elementCache[snapshotID]?[elementID]
     }
 
-    public func prepopulateForTesting(snapshotID: String, elementID: String, role: String?, title: String?, label: String?, value: String?, frame: RectValue?) {
-        let element = AXUIElementCreateApplication(0)
-        let resolved = ResolvedElement(element: element, frame: frame, role: role, title: title, label: label, value: value)
-        elementCache[snapshotID] = [elementID: resolved]
+    public func hasCachedNodes(for snapshotID: String) -> Bool {
+        nodesCache[snapshotID] != nil
+    }
+
+    public func cachedNodes(for snapshotID: String) -> [UINode]? {
+        nodesCache[snapshotID]
+    }
+
+    public func cachedSnapshot(for snapshotID: String) -> Snapshot? {
+        snapshotCache[snapshotID]
+    }
+
+    public func storeSnapshot(_ snapshot: Snapshot, for snapshotID: String) {
+        snapshotCache[snapshotID] = snapshot
+    }
+
+    /// Find the most specific (smallest-frame) cached element whose frame contains the given point.
+    /// Returns `nil` when no cached element matches — the caller should refuse the action.
+    public func resolveElementAtPoint(x: Double, y: Double) -> ResolvedElement? {
+        var bestMatch: ResolvedElement?
+        var bestArea: Double = .greatestFiniteMagnitude
+
+        for snapshotCache in elementCache.values {
+            for element in snapshotCache.values {
+                guard let frame = element.frame else { continue }
+                let minX = frame.x
+                let maxX = frame.x + frame.width
+                let minY = frame.y
+                let maxY = frame.y + frame.height
+                if x >= minX, x <= maxX, y >= minY, y <= maxY {
+                    let area = frame.width * frame.height
+                    if area < bestArea {
+                        bestArea = area
+                        bestMatch = element
+                    }
+                }
+            }
+        }
+        return bestMatch
+    }
+
+    public func frontmostFocusedElementRole() -> String? {
+        if let override = testFocusedRoleOverride { return override }
+        guard AXIsProcessTrusted(), let app = NSWorkspace.shared.frontmostApplication else { return nil }
+        let axApp = AXUIElementCreateApplication(app.processIdentifier)
+        guard let focusedElement = axCopyElement(axApp, attribute: kAXFocusedUIElementAttribute) else { return nil }
+        return axCopyString(focusedElement, attribute: kAXRoleAttribute)
     }
 
     public func frontmostContainsText(_ text: String) -> Bool {
@@ -63,6 +117,35 @@ public final class AccessibilityService {
         let axApp = AXUIElementCreateApplication(app.processIdentifier)
         var seen = 0
         return searchText(in: axApp, needle: text.lowercased(), remainingDepth: 6, seen: &seen, maxNodes: 300)
+    }
+
+    public func frontmostContainsTextPolling(_ text: String) -> Bool {
+        guard AXIsProcessTrusted(), let app = NSWorkspace.shared.frontmostApplication else { return false }
+        let pid = app.processIdentifier
+        let needle = text.lowercased()
+
+        if pid == pollingCachePID, pollingAbsentTexts.contains(needle) {
+            return false
+        }
+
+        if pid != pollingCachePID {
+            pollingCachePID = pid
+            pollingAbsentTexts.removeAll()
+        }
+
+        let axApp = AXUIElementCreateApplication(pid)
+        var seen = 0
+        let found = searchText(in: axApp, needle: needle, remainingDepth: 3, seen: &seen, maxNodes: 50)
+
+        if !found {
+            pollingAbsentTexts.insert(needle)
+        }
+        return found
+    }
+
+    public func invalidatePollingCache() {
+        pollingCachePID = nil
+        pollingAbsentTexts.removeAll()
     }
 
     public func performMenuAction(path: [String]) throws {

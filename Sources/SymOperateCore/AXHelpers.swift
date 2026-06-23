@@ -8,8 +8,9 @@ func axCopyAttribute(_ element: AXUIElement, attribute: String) -> AnyObject? {
 }
 
 func axCopyElement(_ element: AXUIElement, attribute: String) -> AXUIElement? {
-    guard let value = axCopyAttribute(element, attribute: attribute) else { return nil }
-    return (value as! AXUIElement)
+    guard let value = axCopyAttribute(element, attribute: attribute),
+          CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+    return unsafeDowncast(value, to: AXUIElement.self)
 }
 
 func axCopyElements(_ element: AXUIElement, attribute: String) -> [AXUIElement]? {
@@ -28,14 +29,24 @@ func axCopyFrame(_ element: AXUIElement) -> RectValue? {
         return nil
     }
 
+    // Verify CF types before casting — AX API may return unexpected types
+    // when elements become stale mid-flight.
+    guard CFGetTypeID(positionValue) == AXValueGetTypeID(),
+          CFGetTypeID(sizeValue) == AXValueGetTypeID() else {
+        return nil
+    }
+
+    let posAXValue = unsafeDowncast(positionValue, to: AXValue.self)
+    let sizeAXValue = unsafeDowncast(sizeValue, to: AXValue.self)
+
     var point = CGPoint.zero
     var size = CGSize.zero
 
     guard
-        AXValueGetType(positionValue as! AXValue) == .cgPoint,
-        AXValueGetValue(positionValue as! AXValue, .cgPoint, &point),
-        AXValueGetType(sizeValue as! AXValue) == .cgSize,
-        AXValueGetValue(sizeValue as! AXValue, .cgSize, &size)
+        AXValueGetType(posAXValue) == .cgPoint,
+        AXValueGetValue(posAXValue, .cgPoint, &point),
+        AXValueGetType(sizeAXValue) == .cgSize,
+        AXValueGetValue(sizeAXValue, .cgSize, &size)
     else {
         return nil
     }

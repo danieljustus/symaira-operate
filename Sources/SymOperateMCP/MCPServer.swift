@@ -73,7 +73,7 @@ public final class MCPServer {
             tool("list_apps", description: "List currently running GUI apps on macOS.", input: [:]),
             tool("list_windows", description: "List currently visible windows.", input: [:]),
             tool("list_displays", description: "List all connected displays with bounds and IDs.", input: [:]),
-            tool("snapshot", description: "Capture a display or window as PNG plus coordinate transform metadata. Omit display_id for the main display, or provide window_id for a specific window.", input: [
+            tool("snapshot", description: "Capture a display or window as PNG plus coordinate transform metadata. Both parameters are optional: omit both for the main display, provide display_id for a specific display, or provide window_id for a specific window. When window_id is provided, display_id is ignored.", input: [
                 "type": "object",
                 "properties": [
                     "display_id": ["type": "integer", "description": "Display ID to capture. Omit for main display."],
@@ -98,7 +98,7 @@ public final class MCPServer {
                     "window_id": ["type": "integer", "description": "Window ID to capture. When provided, display_id is ignored."],
                 ],
             ]),
-            tool("find_ui", description: "Search the current UI tree by role, title, label, value, subrole, or actions. Supports regex patterns (wrap in /slashes/).", input: [
+            tool("find_ui", description: "Search the UI tree by role, title, label, value, subrole, or actions. Supports regex patterns (wrap in /slashes/). When snapshot_id is provided and the snapshot is still cached, reuses the existing snapshot instead of taking a fresh one.", input: [
                 "type": "object",
                 "properties": [
                     "role": ["type": "string"],
@@ -110,7 +110,7 @@ public final class MCPServer {
                     "snapshot_id": ["type": "string", "description": "Reuse an existing snapshot. If omitted, takes a fresh one."],
                 ],
             ]),
-            tool("click", description: "Click by x/y coordinates or by snapshot_id + element_id.", input: [
+            tool("click", description: "Click by x/y coordinates or by snapshot_id + element_id. Requires exactly one of two groups: (x, y) for coordinate-based clicking, or (snapshot_id, element_id) for element-based clicking. Raw coordinates require a prior query_ui snapshot so the target element can be identified and safety-checked; destructive controls and secure text fields are always blocked. Optional: button (default \"left\"), double_click.", input: [
                 "type": "object",
                 "properties": [
                     "snapshot_id": ["type": "string"],
@@ -119,6 +119,10 @@ public final class MCPServer {
                     "y": ["type": "number"],
                     "button": ["type": "string", "enum": ["left", "right"]],
                     "double_click": ["type": "boolean"],
+                ],
+                "oneOf": [
+                    ["required": ["x", "y"]],
+                    ["required": ["snapshot_id", "element_id"]],
                 ],
             ]),
             tool("type_text", description: "Type raw unicode text into the current focused control.", input: [
@@ -139,7 +143,7 @@ public final class MCPServer {
                 ],
                 "required": ["delta_y"],
             ]),
-            tool("drag", description: "Drag from one coordinate or element to another.", input: [
+            tool("drag", description: "Drag from one coordinate or element to another. Requires exactly one of two groups: (from_x, from_y, to_x, to_y) for coordinate-based dragging, or (snapshot_id, from_element_id, to_element_id) for element-based dragging. Raw coordinates require a prior query_ui snapshot so the target element can be identified and safety-checked; destructive controls and secure text fields are always blocked.", input: [
                 "type": "object",
                 "properties": [
                     "snapshot_id": ["type": "string"],
@@ -150,20 +154,32 @@ public final class MCPServer {
                     "to_x": ["type": "number"],
                     "to_y": ["type": "number"],
                 ],
+                "oneOf": [
+                    ["required": ["from_x", "from_y", "to_x", "to_y"]],
+                    ["required": ["snapshot_id", "from_element_id", "to_element_id"]],
+                ],
             ]),
-            tool("launch_app", description: "Launch an app by bundle_id or app_name.", input: [
+            tool("launch_app", description: "Launch an app by bundle_id or app_name. At least one of bundle_id or app_name is required.", input: [
                 "type": "object",
                 "properties": [
                     "bundle_id": ["type": "string"],
                     "app_name": ["type": "string"],
                 ],
+                "anyOf": [
+                    ["required": ["bundle_id"]],
+                    ["required": ["app_name"]],
+                ],
             ]),
-            tool("focus_window", description: "Activate an app and optionally raise a matching window title.", input: [
+            tool("focus_window", description: "Activate an app and optionally raise a matching window title. At least one of bundle_id or app_name is required.", input: [
                 "type": "object",
                 "properties": [
                     "bundle_id": ["type": "string"],
                     "app_name": ["type": "string"],
                     "title": ["type": "string"],
+                ],
+                "anyOf": [
+                    ["required": ["bundle_id"]],
+                    ["required": ["app_name"]],
                 ],
             ]),
             tool("menu_action", description: "Trigger a frontmost-app menu path like [\"File\", \"Save\"].", input: [
@@ -317,7 +333,7 @@ public final class MCPServer {
             )
         case "version":
             let checker = UpdateChecker()
-            payload = checker.checkForUpdate()
+            payload = await checker.checkForUpdate()
         default:
             throw AutomationError.notFound("Unknown tool '\(name)'.")
         }
@@ -436,47 +452,50 @@ public final class MCPServer {
         return data
     }
 
-    private func string(_ value: Any?) -> String? { value as? String }
+}
 
-    private func double(_ value: Any?) -> Double? {
+private extension MCPServer {
+    func string(_ value: Any?) -> String? { value as? String }
+
+    func double(_ value: Any?) -> Double? {
         if let n = value as? NSNumber { return n.doubleValue }
         return (value as? String).flatMap(Double.init)
     }
 
-    private func uint32(_ value: Any?) -> UInt32? {
+    func uint32(_ value: Any?) -> UInt32? {
         if let n = value as? NSNumber { return n.uint32Value }
         return (value as? String).flatMap(UInt32.init)
     }
 
-    private func intOptional(_ value: Any?) -> Int? {
+    func intOptional(_ value: Any?) -> Int? {
         if let n = value as? NSNumber { return n.intValue }
         return (value as? String).flatMap(Int.init)
     }
 
-    private func int(_ value: Any?, default defaultValue: Int) -> Int {
+    func int(_ value: Any?, default defaultValue: Int) -> Int {
         intOptional(value) ?? defaultValue
     }
 
-    private func bool(_ value: Any?, default defaultValue: Bool) -> Bool {
+    func bool(_ value: Any?, default defaultValue: Bool) -> Bool {
         if let b = value as? Bool { return b }
         return (value as? NSNumber)?.boolValue ?? defaultValue
     }
 
-    private func requireString(_ value: Any?, name: String) throws -> String {
+    func requireString(_ value: Any?, name: String) throws -> String {
         guard let string = value as? String, !string.isEmpty else {
             throw AutomationError.invalidArgument("Missing required string argument '\(name)'.")
         }
         return string
     }
 
-    private func requireDouble(_ value: Any?, name: String) throws -> Double {
+    func requireDouble(_ value: Any?, name: String) throws -> Double {
         guard let double = double(value) else {
             throw AutomationError.invalidArgument("Missing required numeric argument '\(name)'.")
         }
         return double
     }
 
-    private func requireStringArray(_ value: Any?, name: String) throws -> [String] {
+    func requireStringArray(_ value: Any?, name: String) throws -> [String] {
         guard let array = value as? [String], !array.isEmpty else {
             throw AutomationError.invalidArgument("Missing required string array argument '\(name)'.")
         }

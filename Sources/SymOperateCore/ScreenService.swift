@@ -5,7 +5,7 @@ import Foundation
 import ImageIO
 @preconcurrency import ScreenCaptureKit
 
-public final class ScreenService {
+public final class ScreenService: ScreenServiceProtocol {
     private let fm = FileManager.default
     private let snapshotDirectory: URL
 
@@ -15,9 +15,9 @@ public final class ScreenService {
         cleanupOldSnapshots()
     }
 
-    /// Deletes snapshot PNGs older than 30 minutes to prevent unbounded disk accumulation.
+    /// Deletes snapshot PNGs older than 5 minutes to prevent unbounded disk accumulation.
     private func cleanupOldSnapshots() {
-        let cutoff = Date().addingTimeInterval(-1800) // 30 minutes
+        let cutoff = Date().addingTimeInterval(-300) // 5 minutes
         guard let files = try? fm.contentsOfDirectory(at: snapshotDirectory, includingPropertiesForKeys: [.creationDateKey]) else { return }
         for file in files where file.pathExtension == "png" {
             guard let attrs = try? fm.attributesOfItem(atPath: file.path),
@@ -56,30 +56,33 @@ public final class ScreenService {
         return displays
     }
 
-    public func captureMainDisplay(maxDimension: CGFloat = 1280) throws -> Snapshot {
+    public func captureMainDisplay(maxDimension: CGFloat) throws -> Snapshot {
         try capture(
             displayID: CGMainDisplayID(),
             bounds: CGDisplayBounds(CGMainDisplayID()),
-            maxDimension: maxDimension
+            maxDimension: maxDimension,
+            saveDebugImage: false
         )
     }
 
-    public func captureDisplay(displayID: UInt32, maxDimension: CGFloat = 1280) throws -> Snapshot {
+    public func captureDisplay(displayID: UInt32, maxDimension: CGFloat) throws -> Snapshot {
         try capture(
             displayID: displayID,
             bounds: CGDisplayBounds(displayID),
-            maxDimension: maxDimension
+            maxDimension: maxDimension,
+            saveDebugImage: false
         )
     }
 
-    public func captureWindow(windowID: Int, maxDimension: CGFloat = 1280) throws -> Snapshot {
+    public func captureWindow(windowID: Int, maxDimension: CGFloat) throws -> Snapshot {
         let windowBoundsRect = windowBounds(for: windowID)
         let displayID = CGMainDisplayID()
         return try capture(
             displayID: displayID,
             bounds: windowBoundsRect,
             maxDimension: maxDimension,
-            windowID: windowID
+            windowID: windowID,
+            saveDebugImage: false
         )
     }
 
@@ -87,10 +90,10 @@ public final class ScreenService {
         displayID: CGDirectDisplayID,
         bounds: CGRect,
         maxDimension: CGFloat,
-        windowID: Int? = nil
+        windowID: Int? = nil,
+        saveDebugImage: Bool = false
     ) throws -> Snapshot {
         let id = UUID().uuidString
-        let debugPath = snapshotDirectory.appendingPathComponent("\(id).png")
 
         let captureResult: (image: CGImage, contentRect: CGRect)
         if let windowID {
@@ -101,7 +104,15 @@ public final class ScreenService {
 
         let scaled = resizeIfNeeded(image: captureResult.image, maxDimension: maxDimension)
         let png = try pngData(for: scaled)
-        try png.write(to: debugPath)
+
+        var debugPath: String?
+        if saveDebugImage {
+            let path = snapshotDirectory.appendingPathComponent("\(id).png")
+            try png.write(to: path)
+            debugPath = path.path
+        }
+
+        cleanupOldSnapshots()
 
         let imageSize = SizeValue(width: Double(scaled.width), height: Double(scaled.height))
         let rectValue = RectValue(
@@ -118,7 +129,7 @@ public final class ScreenService {
             imageSize: imageSize,
             displayBounds: rectValue,
             displayID: displayID,
-            debugImagePath: debugPath.path,
+            debugImagePath: debugPath,
             transform: transform
         )
     }
