@@ -1,0 +1,71 @@
+name: Bug report
+description: Report something that isn't working correctly.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill out the sections below so we can reproduce and fix it.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: A clear, concise description of the bug.
+      placeholder: "symoperate click reports success but does not actually click the button."
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps that consistently trigger the issue.
+      placeholder: |
+        1. Launch Safari with a specific page
+        2. Run `query_ui` for the button
+        3. Run `click` with the returned element_id
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: "The button should be clicked and the sheet should open."
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      placeholder: "The tool returns success but the UI does not change."
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Version, macOS version, hardware, host app, and permissions state.
+      placeholder: |
+        - symoperate version: v0.2.1
+        - macOS: 15.2 (24C101)
+        - Mac: MacBook Pro M3
+        - Host: Claude Desktop / OpenCode / Cursor
+        - Permissions granted: Accessibility ✅, Screen Recording ✅
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or MCP payloads
+      description: If safe to share, paste relevant request/response JSON or stderr output. Redact any personal information.
+      render: json
+    validations:
+      required: false
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      description: Confirm the bug is not about bypassing safety guards.
+      options:
+        - label: This issue does not describe automating passwords, payments, permission dialogs, or account-recovery flows.
+          required: true

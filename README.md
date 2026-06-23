@@ -2,6 +2,11 @@
 
 > Let an AI agent see and drive your Mac — locally, over MCP.
 
+[![CI](https://github.com/danieljustus/symaira-operate/actions/workflows/ci.yml/badge.svg)](https://github.com/danieljustus/symaira-operate/actions/workflows/ci.yml)
+[![Latest Release](https://img.shields.io/github/v/release/danieljustus/symaira-operate?sort=semver)](https://github.com/danieljustus/symaira-operate/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Swift](https://img.shields.io/badge/Swift-6.0-orange.svg)](https://swift.org)
+
 `symoperate` is a native macOS desktop-automation **MCP server**. It exposes
 screenshots, the Accessibility tree, mouse/keyboard input, and app/window control
 over stdio, so an agent (Claude Desktop, OpenCode, Cursor, …) can operate the
@@ -15,6 +20,40 @@ tune = thermals/brightness/power.**
 > **Status: v0.2.1.** Working native implementation (rebranded from the author's
 > `mac-operator` prototype), 106 tests passing.
 
+## Why symoperate?
+
+- **Local and supervised.** No remote listener, no daemon. The agent sends one
+  action at a time over stdio and gets fresh state back.
+- **MCP-native.** Works with any MCP host — Claude Desktop, OpenCode, Cursor, …
+  — without host-specific plugins.
+- **Element-first.** Prefer stable accessibility `element_id`s over brittle
+  screen coordinates; re-snapshot after each UI change.
+- **Safety-guarded.** Refuses destructive controls and secure text fields; never
+  automate passwords or permission dialogs without explicit confirmation.
+- **Native macOS.** Built with AppKit, Accessibility, and ScreenCaptureKit for
+  reliable performance on macOS 15+.
+
+## Install
+
+**Homebrew (recommended):**
+
+```bash
+brew install danieljustus/tap/symoperate
+```
+
+**Direct download:** grab the latest `symoperate.dmg` from the
+[Releases page](https://github.com/danieljustus/symaira-operate/releases/latest),
+open it, and move `symoperate` to `/usr/local/bin/` (or any directory on your
+`PATH`).
+
+Then grant permissions and verify the install:
+
+```bash
+symoperate permissions grant accessibility
+symoperate permissions grant screen
+symoperate doctor
+```
+
 ## Requirements
 
 - macOS 15+
@@ -24,6 +63,7 @@ tune = thermals/brightness/power.**
 
 ```bash
 swift build            # binary at .build/debug/symoperate
+swift test             # run the test suite
 swift run -q symoperate doctor
 ```
 

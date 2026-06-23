@@ -1,0 +1,47 @@
+name: Feature request
+description: Suggest an improvement or a new capability.
+title: "[Feature] "
+labels: ["feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement. Please describe the use case and the desired behavior.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What are you trying to achieve? What is hard or impossible today?
+      placeholder: "I want symoperate to wait for a specific UI element to appear before clicking it."
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the feature, API change, or new tool you have in mind.
+      placeholder: "Add a `wait_for` tool that polls the accessibility tree until a matching element appears or a timeout is reached."
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Did you consider workarounds? Why are they insufficient?
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Links, screenshots, or references to other tools that solve this well.
+    validations:
+      required: false
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      description: Confirm the feature does not weaken the safety model.
+      options:
+        - label: This feature would not bypass the destructive-action guard, secure text fields, or permission dialogs.
+          required: true

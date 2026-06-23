@@ -4,3 +4,18 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      actions-minor:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: swift
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      swift-minor:
+        update-types:
+          - minor
+          - patch
