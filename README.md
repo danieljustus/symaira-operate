@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/danieljustus/symaira-operate/actions/workflows/ci.yml/badge.svg)](https://github.com/danieljustus/symaira-operate/actions/workflows/ci.yml)
 [![Latest Release](https://img.shields.io/github/v/release/danieljustus/symaira-operate?sort=semver)](https://github.com/danieljustus/symaira-operate/releases/latest)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Swift](https://img.shields.io/badge/Swift-6.0-orange.svg)](https://swift.org)
 
 `symoperate` is a native macOS desktop-automation **MCP server**. It exposes
@@ -17,8 +17,8 @@ Part of the [Symaira](../ECOSYSTEM.md) family, and the agent-native sibling of
 [`symaira-tune`](../symaira-tune) (hardware tuning): **operate = GUI actions,
 tune = thermals/brightness/power.**
 
-> **Status: v0.2.1.** Working native implementation (rebranded from the author's
-> `mac-operator` prototype), 106 tests passing.
+> **Status: v0.2.2.** Working native implementation (rebranded from the author's
+> `mac-operator` prototype), 111 tests passing.
 
 ## Why symoperate?
 
