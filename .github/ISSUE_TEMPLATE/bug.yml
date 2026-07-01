@@ -46,7 +46,7 @@ body:
       label: Environment
       description: Version, macOS version, hardware, host app, and permissions state.
       placeholder: |
-        - symoperate version: v0.2.1
+        - symoperate version: v0.2.3
         - macOS: 15.2 (24C101)
         - Mac: MacBook Pro M3
         - Host: Claude Desktop / OpenCode / Cursor
