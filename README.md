@@ -17,7 +17,7 @@ Part of the [Symaira](../ECOSYSTEM.md) family, and the agent-native sibling of
 [`symaira-tune`](../symaira-tune) (hardware tuning): **operate = GUI actions,
 tune = thermals/brightness/power.**
 
-> **Status: v0.2.2.** Working native implementation (rebranded from the author's
+> **Status: v0.2.3.** Working native implementation (rebranded from the author's
 > `mac-operator` prototype), 111 tests passing.
 
 ## Why symoperate?
