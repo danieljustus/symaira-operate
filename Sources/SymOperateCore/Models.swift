@@ -273,10 +273,27 @@ public enum AutomationError: LocalizedError {
     }
 }
 
-enum DateFormats {
-    static func iso8601String(from date: Date) -> String {
+public enum DateFormats {
+    public static func iso8601String(from date: Date) -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter.string(from: date)
     }
 }
+
+public struct HistoryEvent: Codable, Sendable {
+    public let timestamp: String
+    public let action: String
+    public let targets: [String: String]
+    public let success: Bool
+    public let message: String
+
+    public init(timestamp: String = DateFormats.iso8601String(from: Date()), action: String, targets: [String: String] = [:], success: Bool, message: String) {
+        self.timestamp = timestamp
+        self.action = action
+        self.targets = targets
+        self.success = success
+        self.message = message
+    }
+}
+

@@ -102,3 +102,10 @@ public protocol PermissionServiceProtocol {
     func requestAccessibilityPermission() -> Bool
     func requestScreenRecordingPermission() -> Bool
 }
+
+// MARK: - History Service
+
+public protocol HistoryServiceProtocol {
+    func record(_ event: HistoryEvent) throws
+    func events() throws -> [HistoryEvent]
+}

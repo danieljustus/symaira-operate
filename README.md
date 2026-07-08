@@ -99,7 +99,7 @@ coordinates → 4. one action → 5. re-snapshot before the next step.
 Supervised, local, stdio-only. Destructive controls (Delete/Trash/Uninstall/
 Allow/Authorize/Unlock/Quit/…) and secure text fields are refused for
 element-based actions. Don't automate passwords, payments, or permission dialogs
-without explicit user confirmation. See [AGENTS.md](AGENTS.md) and `NOTICE`.
+without explicit user confirmation. See [AGENTS.md](AGENTS.md), [SAFETY_AUDIT.md](SAFETY_AUDIT.md), and `NOTICE`.
 
 ## Documentation
 

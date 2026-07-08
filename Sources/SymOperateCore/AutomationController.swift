@@ -11,6 +11,7 @@ public final class AutomationController {
     private let ocr: any OCRServiceProtocol
     private let queryService: any UIQueryServiceProtocol
     public var actionPolicy: ActionPolicy
+    private let history: any HistoryServiceProtocol
 
     public init(
         permissions: any PermissionServiceProtocol = PermissionService(),
@@ -20,7 +21,8 @@ public final class AutomationController {
         input: any InputServiceProtocol = InputService(),
         ocr: any OCRServiceProtocol = OCRService(),
         queryService: any UIQueryServiceProtocol = UIQueryService(),
-        actionPolicy: ActionPolicy = ActionPolicy()
+        actionPolicy: ActionPolicy = ActionPolicy(),
+        history: any HistoryServiceProtocol = HistoryService()
     ) {
         self.permissions = permissions
         self.screen = screen
@@ -30,6 +32,7 @@ public final class AutomationController {
         self.ocr = ocr
         self.queryService = queryService
         self.actionPolicy = actionPolicy
+        self.history = history
     }
 
     public func permissionsStatus() -> PermissionSnapshot {
@@ -131,6 +134,22 @@ public final class AutomationController {
         return UIQueryResult(snapshot: queryResult.snapshot, app: queryResult.app, nodes: matched)
     }
 
+    private func executeAction(
+        name: String,
+        targets: [String: String] = [:],
+        action: () throws -> String
+    ) throws -> ActionResult {
+        do {
+            let message = try action()
+            let result = ActionResult(ok: true, message: message, snapshot: try? screen.captureMainDisplay())
+            try? history.record(HistoryEvent(action: name, targets: targets, success: true, message: message))
+            return result
+        } catch {
+            try? history.record(HistoryEvent(action: name, targets: targets, success: false, message: error.localizedDescription))
+            throw error
+        }
+    }
+
     public func click(
         snapshotID: String? = nil,
         elementID: String? = nil,
@@ -139,29 +158,44 @@ public final class AutomationController {
         button: String = "left",
         doubleClick: Bool = false
     ) throws -> ActionResult {
-        let target = try resolvePoint(snapshotID: snapshotID, elementID: elementID, x: x, y: y)
-        try input.click(at: target, button: button, doubleClick: doubleClick)
-        return ActionResult(ok: true, message: "Click delivered at (\(Int(target.x)), \(Int(target.y))).", snapshot: try? screen.captureMainDisplay())
+        var targets: [String: String] = ["button": button, "doubleClick": String(doubleClick)]
+        if let snapshotID { targets["snapshotID"] = snapshotID }
+        if let elementID { targets["elementID"] = elementID }
+        if let x { targets["x"] = String(x) }
+        if let y { targets["y"] = String(y) }
+
+        return try executeAction(name: "click", targets: targets) {
+            let target = try resolvePoint(snapshotID: snapshotID, elementID: elementID, x: x, y: y)
+            try input.click(at: target, button: button, doubleClick: doubleClick)
+            return "Click delivered at (\(Int(target.x)), \(Int(target.y)))."
+        }
     }
 
     public func typeText(_ text: String) throws -> ActionResult {
-        guard !text.isEmpty else {
-            throw AutomationError.invalidArgument("type_text requires a non-empty text argument.")
+        let redacted = "<redacted: \(text.count) chars>"
+        return try executeAction(name: "type_text", targets: ["text": redacted]) {
+            guard !text.isEmpty else {
+                throw AutomationError.invalidArgument("type_text requires a non-empty text argument.")
+            }
+            try guardAgainstSecureField()
+            try input.typeText(text)
+            return "Typed \(text.count) characters."
         }
-        try guardAgainstSecureField()
-        try input.typeText(text)
-        return ActionResult(ok: true, message: "Typed \(text.count) characters.", snapshot: try? screen.captureMainDisplay())
     }
 
     public func pressKeys(_ keys: [String]) throws -> ActionResult {
-        try guardAgainstSecureField()
-        try input.pressKeys(keys)
-        return ActionResult(ok: true, message: "Pressed keys: \(keys.joined(separator: "+")).", snapshot: try? screen.captureMainDisplay())
+        return try executeAction(name: "press_keys", targets: ["keys": keys.joined(separator: "+")]) {
+            try guardAgainstSecureField()
+            try input.pressKeys(keys)
+            return "Pressed keys: \(keys.joined(separator: "+"))."
+        }
     }
 
     public func scroll(deltaX: Double = 0, deltaY: Double) throws -> ActionResult {
-        try input.scroll(deltaX: deltaX, deltaY: deltaY)
-        return ActionResult(ok: true, message: "Scrolled by (\(deltaX), \(deltaY)).", snapshot: try? screen.captureMainDisplay())
+        return try executeAction(name: "scroll", targets: ["deltaX": String(deltaX), "deltaY": String(deltaY)]) {
+            try input.scroll(deltaX: deltaX, deltaY: deltaY)
+            return "Scrolled by (\(deltaX), \(deltaY))."
+        }
     }
 
     public func drag(
@@ -173,25 +207,51 @@ public final class AutomationController {
         toX: Double? = nil,
         toY: Double? = nil
     ) throws -> ActionResult {
-        let start = try resolvePoint(snapshotID: snapshotID, elementID: fromElementID, x: fromX, y: fromY)
-        let end = try resolvePoint(snapshotID: snapshotID, elementID: toElementID, x: toX, y: toY)
-        try input.drag(from: start, to: end, steps: 24)
-        return ActionResult(ok: true, message: "Dragged from (\(Int(start.x)), \(Int(start.y))) to (\(Int(end.x)), \(Int(end.y))).", snapshot: try? screen.captureMainDisplay())
+        var targets: [String: String] = [:]
+        if let snapshotID { targets["snapshotID"] = snapshotID }
+        if let fromElementID { targets["fromElementID"] = fromElementID }
+        if let toElementID { targets["toElementID"] = toElementID }
+        if let fromX { targets["fromX"] = String(fromX) }
+        if let fromY { targets["fromY"] = String(fromY) }
+        if let toX { targets["toX"] = String(toX) }
+        if let toY { targets["toY"] = String(toY) }
+
+        return try executeAction(name: "drag", targets: targets) {
+            let start = try resolvePoint(snapshotID: snapshotID, elementID: fromElementID, x: fromX, y: fromY)
+            let end = try resolvePoint(snapshotID: snapshotID, elementID: toElementID, x: toX, y: toY)
+            try input.drag(from: start, to: end, steps: 24)
+            return "Dragged from (\(Int(start.x)), \(Int(start.y))) to (\(Int(end.x)), \(Int(end.y)))."
+        }
     }
 
     public func launchApp(bundleID: String? = nil, appName: String? = nil) throws -> ActionResult {
-        try apps.launchApp(bundleID: bundleID, appName: appName)
-        return ActionResult(ok: true, message: "Application launch requested.", snapshot: try? screen.captureMainDisplay())
+        var targets: [String: String] = [:]
+        if let bundleID { targets["bundleID"] = bundleID }
+        if let appName { targets["appName"] = appName }
+
+        return try executeAction(name: "launch_app", targets: targets) {
+            try apps.launchApp(bundleID: bundleID, appName: appName)
+            return "Application launch requested."
+        }
     }
 
     public func focusWindow(bundleID: String? = nil, appName: String? = nil, title: String? = nil) throws -> ActionResult {
-        try apps.focusWindow(bundleID: bundleID, appName: appName, title: title)
-        return ActionResult(ok: true, message: "Window focus updated.", snapshot: try? screen.captureMainDisplay())
+        var targets: [String: String] = [:]
+        if let bundleID { targets["bundleID"] = bundleID }
+        if let appName { targets["appName"] = appName }
+        if let title { targets["title"] = title }
+
+        return try executeAction(name: "focus_window", targets: targets) {
+            try apps.focusWindow(bundleID: bundleID, appName: appName, title: title)
+            return "Window focus updated."
+        }
     }
 
     public func menuAction(path: [String]) throws -> ActionResult {
-        try accessibility.performMenuAction(path: path)
-        return ActionResult(ok: true, message: "Menu action triggered: \(path.joined(separator: " > ")).", snapshot: try? screen.captureMainDisplay())
+        return try executeAction(name: "menu_action", targets: ["path": path.joined(separator: " > ")]) {
+            try accessibility.performMenuAction(path: path)
+            return "Menu action triggered: \(path.joined(separator: " > "))."
+        }
     }
 
     public func waitFor(text: String?, app: String?, timeoutSeconds: Double = 10) async throws -> ActionResult {
