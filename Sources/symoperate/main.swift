@@ -7,6 +7,7 @@ enum Command: String {
     case doctor
     case permissions
     case version
+    case history
 }
 
 private struct GrantResult: Codable {
@@ -23,6 +24,7 @@ func printUsage() {
       serve                          Run the MCP server over stdio.
       doctor                         Print permission status and environment checks (JSON).
       version                        Print version and check for updates.
+      history --json                 Print the local operation history in JSON format.
       permissions status             Print the current macOS permissions.
       permissions grant accessibility  Trigger the Accessibility permission prompt.
       permissions grant screen         Trigger the Screen Recording permission prompt.
@@ -161,6 +163,16 @@ do {
             recommendations: recommendations
         ))
         exit(ok ? ExitCode.ok.rawValue : ExitCode.permissionDenied.rawValue)
+    case Command.history.rawValue:
+        let rest = Array(args.dropFirst())
+        if !rest.contains("--json") {
+            FileHandle.standardError.write(Data("error: history currently only supports --json output.\n".utf8))
+            exit(ExitCode.invalidArgument.rawValue)
+        }
+        let historyService = HistoryService()
+        let events = try historyService.events()
+        try printJSON(events)
+        exit(0)
     case Command.permissions.rawValue:
         let rest = Array(args.dropFirst())
         guard let subcommand = rest.first else {
