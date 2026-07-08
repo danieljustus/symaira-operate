@@ -17,7 +17,7 @@ public final class HistoryService: HistoryServiceProtocol, Sendable {
     public func record(_ event: HistoryEvent) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        
+
         let data = try encoder.encode(event)
         guard let jsonString = String(data: data, encoding: .utf8) else {
             return
@@ -42,10 +42,10 @@ public final class HistoryService: HistoryServiceProtocol, Sendable {
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             return []
         }
-        
+
         let contents = try String(contentsOf: fileURL, encoding: .utf8)
         let lines = contents.components(separatedBy: .newlines).filter { !$0.isEmpty }
-        
+
         let decoder = JSONDecoder()
         var results: [HistoryEvent] = []
         for line in lines {
@@ -54,7 +54,7 @@ public final class HistoryService: HistoryServiceProtocol, Sendable {
                 results.append(event)
             }
         }
-        
+
         if results.count > maxEvents {
             return Array(results.suffix(maxEvents))
         }

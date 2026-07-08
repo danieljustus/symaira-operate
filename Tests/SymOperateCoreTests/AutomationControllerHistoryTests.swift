@@ -3,11 +3,11 @@ import XCTest
 
 private final class MockHistoryService: HistoryServiceProtocol {
     var recordedEvents: [HistoryEvent] = []
-    
+
     func record(_ event: HistoryEvent) throws {
         recordedEvents.append(event)
     }
-    
+
     func events() throws -> [HistoryEvent] {
         return recordedEvents
     }
@@ -23,7 +23,7 @@ private final class MockInputServiceForHistory: InputServiceProtocol {
 
 private final class MockAccessibilityServiceForHistory: AccessibilityServiceProtocol {
     var focusedRoleOverride: String?
-    
+
     func queryFrontmostUI(snapshotID: String, maxDepth: Int, maxNodes: Int) throws -> [UINode] { [] }
     func resolveElement(snapshotID: String, elementID: String) -> AccessibilityService.ResolvedElement? { nil }
     func resolveElementAtPoint(x: Double, y: Double) -> AccessibilityService.ResolvedElement? { nil }
@@ -67,11 +67,11 @@ private final class MockPermissionServiceForHistory: PermissionServiceProtocol {
 }
 
 final class AutomationControllerHistoryTests: XCTestCase {
-    
+
     private var controller: AutomationController!
     private var mockHistory: MockHistoryService!
     private var mockAX: MockAccessibilityServiceForHistory!
-    
+
     override func setUp() {
         super.setUp()
         mockHistory = MockHistoryService()
@@ -87,27 +87,27 @@ final class AutomationControllerHistoryTests: XCTestCase {
             history: mockHistory
         )
     }
-    
+
     override func tearDown() {
         controller = nil
         mockHistory = nil
         mockAX = nil
         super.tearDown()
     }
-    
+
     func testTypeTextSuccessRecordsRedactedEvent() throws {
         _ = try controller.typeText("mySecretPassword")
-        
+
         XCTAssertEqual(mockHistory.recordedEvents.count, 1)
         let event = mockHistory.recordedEvents.first!
         XCTAssertEqual(event.action, "type_text")
         XCTAssertTrue(event.success)
         XCTAssertEqual(event.targets["text"], "<redacted: 16 chars>")
     }
-    
+
     func testTypeTextRefusedRecordsFailedEvent() throws {
         mockAX.focusedRoleOverride = "AXSecureTextField"
-        
+
         do {
             _ = try controller.typeText("mySecretPassword")
             XCTFail("Should have thrown")
@@ -120,7 +120,7 @@ final class AutomationControllerHistoryTests: XCTestCase {
             XCTAssertTrue(event.message.contains("Refusing to type into a secure text field"))
         }
     }
-    
+
     func testRawClickFailureRecordsFailedEvent() throws {
         do {
             _ = try controller.click(x: 100, y: 100)
