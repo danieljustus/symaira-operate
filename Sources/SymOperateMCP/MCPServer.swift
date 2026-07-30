@@ -381,7 +381,11 @@ public final class MCPServer {
         }
         return text
     }
+}
 
+// MARK: - Send helpers
+
+extension MCPServer {
     private func sendResponse(id: Any?, result: [String: Any]) throws {
         var message: [String: Any] = [
             "jsonrpc": "2.0",
@@ -432,7 +436,11 @@ public final class MCPServer {
         FileHandle.standardOutput.write(data)
         FileHandle.standardOutput.write(Data([0x0A])) // newline
     }
+}
 
+// MARK: - Read helpers
+
+extension MCPServer {
     /// Read one MCP message from stdin.
     ///
     /// Accepts both standard MCP newline-delimited framing (one JSON object per
