@@ -99,9 +99,15 @@ private final class MockUIQueryServiceForFindUI: UIQueryServiceProtocol {
     }
 }
 
+private let testPermissionSource = PermissionSource(
+    pid: 1, ppid: 0, executablePath: "/usr/local/bin/symoperate",
+    launchingProcessName: "test",
+    note: "Mock source for test."
+)
+
 private final class MockPermissionServiceForFindUI: PermissionServiceProtocol {
     func status() -> PermissionSnapshot {
-        PermissionSnapshot(accessibilityGranted: true, screenRecordingGranted: true)
+        PermissionSnapshot(accessibilityGranted: true, screenRecordingGranted: true, source: testPermissionSource)
     }
     func requestAccessibilityPermission() -> Bool { true }
     func requestScreenRecordingPermission() -> Bool { true }

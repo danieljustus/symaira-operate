@@ -31,6 +31,38 @@ Agents using `symoperate` must not automate the following flows without explicit
 
 The destructive-action guard naturally blocks buttons like "Allow" or "Authorize" in permission dialogs to prevent agents from self-escalating their host's privileges.
 
+### Responsible-Process Attribution
+
+On macOS, TCC permissions (Accessibility, Screen Recording) are granted per
+*process*, not per user or per binary. Whether `AXIsProcessTrusted()` or
+`CGPreflightScreenCaptureAccess()` returns `true` depends entirely on which
+process calls them.
+
+`PermissionSnapshot` now includes a `source` block that identifies the process
+whose grants the booleans describe:
+
+| Field | Description |
+|---|---|
+| `pid` | The process ID that called the TCC APIs. |
+| `ppid` | The parent process ID that launched symoperate. |
+| `executablePath` | Resolved absolute path of the running binary. |
+| `launchingProcessName` | Human-readable name of the parent process (e.g. "Terminal", "zsh", "Cursor"). |
+| `note` | Plain-English explanation of the per-process nature of the grants. |
+
+This attribution is surfaced in `symoperate doctor`, the `permissions_status`
+MCP tool, and any other consumer of `PermissionSnapshot`.
+
+**Why this matters:** When a user runs `symoperate doctor` from a terminal, the
+booleans reflect what the terminal process (or `zsh`) is allowed to do, not what
+the MCP host process (e.g. Cursor, Claude Desktop) would be allowed to do.
+Granting Accessibility to `Terminal.app` does not grant it to `Cursor.app`.
+The `source` block makes this distinction visible and auditable.
+
+To grant permissions correctly, the user should add their MCP host application
+in **System Settings → Privacy & Security → Accessibility** and **Screen
+Recording**, then launch `symoperate` via that host's MCP configuration, not
+from a terminal.
+
 ## Operation History
 
 To ensure an auditable trail, `symoperate` maintains a local history of all GUI automation actions.

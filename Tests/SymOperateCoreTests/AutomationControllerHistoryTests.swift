@@ -60,8 +60,14 @@ private final class MockUIQueryServiceForHistory: UIQueryServiceProtocol {
     func findNodes(in nodes: [UINode], predicate: UIElementPredicate) -> [UINode] { [] }
 }
 
+private let testPermissionSource = PermissionSource(
+    pid: 1, ppid: 0, executablePath: "/usr/local/bin/symoperate",
+    launchingProcessName: "test",
+    note: "Mock source for test."
+)
+
 private final class MockPermissionServiceForHistory: PermissionServiceProtocol {
-    func status() -> PermissionSnapshot { PermissionSnapshot(accessibilityGranted: true, screenRecordingGranted: true) }
+    func status() -> PermissionSnapshot { PermissionSnapshot(accessibilityGranted: true, screenRecordingGranted: true, source: testPermissionSource) }
     func requestAccessibilityPermission() -> Bool { true }
     func requestScreenRecordingPermission() -> Bool { true }
 }

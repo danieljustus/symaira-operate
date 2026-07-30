@@ -125,8 +125,14 @@ private final class MockUIQueryService: UIQueryServiceProtocol {
     }
 }
 
+private let testPermissionSource = PermissionSource(
+    pid: 1, ppid: 0, executablePath: "/usr/local/bin/symoperate",
+    launchingProcessName: "test",
+    note: "Mock source for test."
+)
+
 private final class MockPermissionService: PermissionServiceProtocol {
-    func status() -> PermissionSnapshot { PermissionSnapshot(accessibilityGranted: true, screenRecordingGranted: true) }
+    func status() -> PermissionSnapshot { PermissionSnapshot(accessibilityGranted: true, screenRecordingGranted: true, source: testPermissionSource) }
     func requestAccessibilityPermission() -> Bool { true }
     func requestScreenRecordingPermission() -> Bool { true }
 }

@@ -151,6 +151,21 @@ do {
         var recommendations: [String] = []
         if !screenshotProbe.ok { recommendations.append(screenshotProbe.message) }
         if !accessibilityProbe.ok { recommendations.append(accessibilityProbe.message) }
+
+        // Detect if launched from a terminal or IDE rather than an MCP host.
+        // When that happens, the TCC grants belong to the terminal/IDE, not to
+        // the MCP host that will run symoperate in production.
+        if let parentName = permissions.source.launchingProcessName?.lowercased() {
+            let terminalPatterns = ["terminal", "iterm", "zsh", "bash", "fish", "tmux", "apple_terminal"]
+            let idePatterns = ["code", "cursor", "xcode", "clion", "intellij", "rider", "android studio"]
+            let isTerminal = terminalPatterns.contains { parentName.contains($0) }
+            let isIDE = idePatterns.contains { parentName.contains($0) }
+            if isTerminal || isIDE {
+                let kind = isTerminal ? "terminal" : "IDE"
+                recommendations.append("Launched from a \(kind) (\(permissions.source.launchingProcessName!)). TCC grants reported above belong to the \(kind), not to your MCP host. For production use, grant permissions from the MCP host process (e.g. Claude Desktop, Cursor) and launch symoperate via the host's MCP configuration.")
+            }
+        }
+
         if recommendations.isEmpty { recommendations.append("Environment ready.") }
 
         let ok = screenshotProbe.ok && accessibilityProbe.ok
