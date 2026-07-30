@@ -46,13 +46,35 @@ brew install danieljustus/tap/symoperate
 open it, and move `symoperate` to `/usr/local/bin/` (or any directory on your
 `PATH`).
 
-Then grant permissions and verify the install:
+### Permissions
+
+macOS requires **Accessibility** and **Screen Recording** permissions for the
+process that will actually host the `symoperate` MCP server. **These permissions
+are per-process** — granting them to `Terminal.app` does NOT make them available
+to an MCP host (e.g., Cursor, Claude Desktop) that runs `symoperate` via its
+MCP configuration.
+
+To grant permissions for your MCP host:
+
+1. **Identify the MCP host process** — e.g., `Cursor.app`, `Claude Desktop.app`,
+   or the editor/IDE you use with MCP.
+2. Go to **System Settings → Privacy & Security**.
+3. Add the host app to **Accessibility** and **Screen Recording**.
+4. Verify:
 
 ```bash
-symoperate permissions grant accessibility
-symoperate permissions grant screen
 symoperate doctor
 ```
+
+The `doctor` output now includes a `source` block that identifies which process
+the reported TCC grants belong to. If you see a terminal or IDE listed instead
+of your MCP host, re-check your permissions setup.
+
+> ⚠️ **Important**: Running `symoperate permissions grant accessibility` or
+> `symoperate permissions grant screen` from a terminal will prompt you to
+> authorize the terminal app, not your MCP host. Always grant permissions
+> through System Settings for the process that will actually run `symoperate
+> serve`.
 
 ## Requirements
 

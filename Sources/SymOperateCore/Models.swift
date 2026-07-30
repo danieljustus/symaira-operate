@@ -54,13 +54,44 @@ public struct DisplayInfo: Codable, Sendable {
     }
 }
 
+/// Identifies the process whose TCC grants the PermissionSnapshot booleans describe.
+///
+/// On macOS, TCC permissions (Accessibility, Screen Recording) are per-process.
+/// The booleans in the enclosing `PermissionSnapshot` reflect the grants held by the
+/// process captured here — typically the process running symoperate, which may be a
+/// terminal shell, an IDE, or an MCP host (e.g. Claude Desktop, Cursor).
+public struct PermissionSource: Codable, Sendable, Equatable {
+    /// Process ID of the process whose grants are reported.
+    public let pid: Int32
+    /// Parent process ID (the process that launched symoperate).
+    public let ppid: Int32
+    /// Resolved absolute path to the executable that is running.
+    public let executablePath: String
+    /// Human-readable name of the launching/parent process, where obtainable.
+    /// Examples: "Terminal", "zsh", "Cursor", "Claude Desktop", "Xcode".
+    public let launchingProcessName: String?
+    /// Explanatory note clarifying whose grants the booleans describe.
+    public let note: String
+
+    public init(pid: Int32, ppid: Int32, executablePath: String, launchingProcessName: String?, note: String) {
+        self.pid = pid
+        self.ppid = ppid
+        self.executablePath = executablePath
+        self.launchingProcessName = launchingProcessName
+        self.note = note
+    }
+}
+
 public struct PermissionSnapshot: Codable, Sendable {
     public let accessibilityGranted: Bool
     public let screenRecordingGranted: Bool
+    /// Identifies the process whose TCC grants the booleans above describe.
+    public let source: PermissionSource
 
-    public init(accessibilityGranted: Bool, screenRecordingGranted: Bool) {
+    public init(accessibilityGranted: Bool, screenRecordingGranted: Bool, source: PermissionSource) {
         self.accessibilityGranted = accessibilityGranted
         self.screenRecordingGranted = screenRecordingGranted
+        self.source = source
     }
 }
 
