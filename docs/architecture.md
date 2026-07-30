@@ -34,13 +34,17 @@ symoperate (executable)  →  SymOperateMCP  →  SymOperateCore
 
 ### CLI (`symoperate`)
 
-- `serve`, `doctor`, `permissions status|grant`.
+- `serve`, `doctor`, `version`, `history --json`, `permissions status|grant`.
 
 ## Tool contract
 
-- `snapshot` → PNG (base64) + coordinate transform metadata.
-- `query_ui` → fresh screenshot + frontmost UI tree with `element_id`s.
+- `snapshot`/`list_displays` → PNG (base64) + coordinate transform metadata,
+  by display ID or index.
+- `query_ui`/`query_ui_ocr`/`find_ui` → fresh screenshot + frontmost UI tree
+  with `element_id`s; OCR fallback and role/title/label/frame predicates for
+  apps with weak Accessibility metadata.
 - `click`/`drag` → accept raw coordinates **or** `snapshot_id + element_id`.
+- `get_policy`/`set_policy` → read/augment the `ActionPolicy` allow/deny lists.
 - `element_id`s are ephemeral; re-snapshot after any UI change.
 
 ## Distribution
