@@ -30,6 +30,16 @@ public final class MCPServer {
             do {
                 let result = try await dispatch(method: method, params: params)
                 try sendResponse(id: id, result: result)
+            } catch let error as AutomationError {
+                if case .permissionDenied = error {
+                    // Deliberate safety refusals are NOT JSON-RPC errors — the call
+                    // executed correctly and the outcome is the refusal.
+                    try sendRefusal(id: id, code: error.code, message: error.localizedDescription)
+                } else {
+                    // Genuine faults carry the code in error.data for machine-readable
+                    // classification on the error path.
+                    try sendError(id: id, code: -32000, message: error.localizedDescription, data: ["code": error.code])
+                }
             } catch {
                 try sendError(id: id, code: -32000, message: error.localizedDescription)
             }
@@ -371,7 +381,11 @@ public final class MCPServer {
         }
         return text
     }
+}
 
+// MARK: - Send helpers
+
+extension MCPServer {
     private func sendResponse(id: Any?, result: [String: Any]) throws {
         var message: [String: Any] = [
             "jsonrpc": "2.0",
@@ -381,63 +395,111 @@ public final class MCPServer {
         try send(message)
     }
 
-    private func sendError(id: Any?, code: Int, message: String) throws {
+    private func sendRefusal(id: Any?, code: String, message: String) throws {
         var payload: [String: Any] = [
             "jsonrpc": "2.0",
-            "error": [
-                "code": code,
-                "message": message,
+            "result": [
+                "isError": false,
+                "content": [
+                    ["type": "text", "text": message],
+                ],
+                "structuredContent": [
+                    "status": "refused",
+                    "refusal": [
+                        "code": code,
+                        "message": message,
+                    ],
+                ],
             ],
         ]
         if let id { payload["id"] = id }
         try send(payload)
     }
 
+    private func sendError(id: Any?, code: Int, message: String, data: [String: Any]? = nil) throws {
+        var errorPayload: [String: Any] = [
+            "code": code,
+            "message": message,
+        ]
+        if let data { errorPayload["data"] = data }
+        var payload: [String: Any] = [
+            "jsonrpc": "2.0",
+            "error": errorPayload,
+        ]
+        if let id { payload["id"] = id }
+        try send(payload)
+    }
+
+    /// Emit a single newline-delimited JSON-RPC frame on stdout.
     private func send(_ payload: [String: Any]) throws {
-        let data = try JSONSerialization.data(withJSONObject: payload)
-        let header = "Content-Length: \(data.count)\r\n\r\n"
-        if let headerData = header.data(using: .utf8) {
-            FileHandle.standardOutput.write(headerData)
-        }
+        let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
         FileHandle.standardOutput.write(data)
+        FileHandle.standardOutput.write(Data([0x0A])) // newline
     }
+}
 
+// MARK: - Read helpers
+
+extension MCPServer {
+    /// Read one MCP message from stdin.
+    ///
+    /// Accepts both standard MCP newline-delimited framing (one JSON object per
+    /// line) and legacy LSP Content-Length framing for backward compatibility
+    /// with hosts that cannot be reconfigured.
     private func readMessage(from handle: FileHandle) throws -> Data? {
-        guard let headerData = try readHeader(from: handle), !headerData.isEmpty else {
-            return nil
+        let data = try readLine(from: handle)
+        guard let data else { return nil }
+        guard !data.isEmpty else { return nil }
+
+        // Detect Content-Length framing by peeking for the header prefix.
+        if data.count >= 15,
+           let prefix = String(data: data[0..<15], encoding: .utf8),
+           prefix.lowercased().hasPrefix("content-length:") {
+            return try readContentLengthMessage(from: handle, headerLine: data)
         }
 
-        guard let headerString = String(data: headerData, encoding: .utf8) else {
-            throw AutomationError.operationFailed("Failed to decode MCP header.")
+        // Newline-delimited: the entire line is the JSON message.
+        guard data.count <= Self.maxMessageSize else {
+            throw AutomationError.operationFailed("MCP message size \(data.count) exceeds maximum allowed size of \(Self.maxMessageSize) bytes.")
         }
-
-        let lines = headerString.components(separatedBy: "\r\n")
-        guard let lengthLine = lines.first(where: { $0.lowercased().hasPrefix("content-length:") }) else {
-            throw AutomationError.operationFailed("Missing Content-Length header.")
-        }
-        let value = lengthLine.split(separator: ":").last?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard let length = Int(value) else {
-            throw AutomationError.operationFailed("Invalid Content-Length header.")
-        }
-
-        guard length <= Self.maxMessageSize else {
-            throw AutomationError.operationFailed("MCP message size \(length) exceeds maximum allowed size of \(Self.maxMessageSize) bytes.")
-        }
-
-        return try readBytes(from: handle, count: length)
+        return data
     }
 
-    private func readHeader(from handle: FileHandle) throws -> Data? {
+    /// Read one line (until newline) from the file handle.
+    private func readLine(from handle: FileHandle) throws -> Data? {
         var data = Data()
         while true {
             guard let chunk = try handle.read(upToCount: 1), !chunk.isEmpty else {
                 return data.isEmpty ? nil : data
             }
-            data.append(chunk)
-            if data.count >= 4, data.suffix(4) == Data([13, 10, 13, 10]) {
+            if chunk[0] == 0x0A { // newline
                 return data
             }
+            data.append(chunk)
         }
+    }
+
+    /// Parse a Content-Length-framed message and return its body.
+    /// The header line has already been read into `headerLine`.
+    private func readContentLengthMessage(from handle: FileHandle, headerLine: Data) throws -> Data? {
+        guard let headerString = String(data: headerLine, encoding: .utf8) else {
+            throw AutomationError.operationFailed("Failed to decode MCP header.")
+        }
+        let headerTrimmed = headerString.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parts = headerTrimmed.components(separatedBy: ":")
+        guard parts.count >= 2, parts[0].lowercased() == "content-length" else {
+            throw AutomationError.operationFailed("Missing Content-Length header.")
+        }
+        let value = parts[1..<parts.count].joined(separator: ":").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let length = Int(value) else {
+            throw AutomationError.operationFailed("Invalid Content-Length header.")
+        }
+        guard length <= Self.maxMessageSize else {
+            throw AutomationError.operationFailed("MCP message size \(length) exceeds maximum allowed size of \(Self.maxMessageSize) bytes.")
+        }
+        // Consume the blank line after the header
+        _ = try? handle.read(upToCount: 2) // \r\n
+        return try readBytes(from: handle, count: length)
     }
 
     private func readBytes(from handle: FileHandle, count: Int) throws -> Data {

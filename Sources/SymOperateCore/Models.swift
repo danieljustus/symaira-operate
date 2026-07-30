@@ -307,6 +307,20 @@ public enum AutomationError: LocalizedError {
     case operationFailed(String)
     case staleReference(String)
 
+    /// A stable, closed-vocabulary machine-readable code for this error case.
+    /// Each case maps to one code; codes are additive-only and breaking changes
+    /// to this set must be documented in SAFETY_AUDIT.md.
+    public var code: String {
+        switch self {
+        case .permissionDenied:    return "destructive_control_refused"
+        case .unavailable:         return "element_not_resolvable"
+        case .invalidArgument:     return "invalid_argument"
+        case .notFound:            return "not_found"
+        case .operationFailed:     return "operation_failed"
+        case .staleReference:      return "stale_snapshot"
+        }
+    }
+
     public var errorDescription: String? {
         switch self {
         case let .permissionDenied(message),

@@ -63,6 +63,60 @@ in **System Settings → Privacy & Security → Accessibility** and **Screen
 Recording**, then launch `symoperate` via that host's MCP configuration, not
 from a terminal.
 
+## MCP Refusal Codes
+
+Safety refusals are returned as successful `tools/call` results (not JSON-RPC
+errors) so that MCP clients can classify them without string-matching English
+messages. Every refusal carries a stable, closed-vocabulary `code`.
+
+| Code | Meaning | When triggered |
+|---|---|---|
+| `destructive_control_refused` | The action was blocked by the destructive-action guard. | Target UI element matches a destructive keyword or is a secure text field. |
+| `element_not_resolvable` | The target element could not be found. | Expired snapshot or stale `element_id`. |
+| `invalid_argument` | Required arguments are missing or malformed. | Invalid tool parameters. |
+| `not_found` | The requested tool or resource does not exist. | Unknown tool name in `tools/call`. |
+| `operation_failed` | The operation did not complete successfully. | Runtime failure, permission denied, or screen capture error. |
+| `stale_snapshot` | The referenced snapshot has expired or the element no longer exists. | Stale `element_id` after UI change. |
+
+### Wire format
+
+A deliberate refusal (`destructive_control_refused`):
+
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "isError": false,
+    "content": [{ "type": "text", "text": "Refusing to target a secure text field." }],
+    "structuredContent": {
+      "status": "refused",
+      "refusal": {
+        "code": "destructive_control_refused",
+        "message": "Refusing to target a secure text field."
+      }
+    }
+  },
+  "id": 1
+}
+```
+
+A genuine fault carries the code in `error.data`:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "error": {
+    "code": -32000,
+    "message": "The referenced snapshot has expired...",
+    "data": { "code": "stale_snapshot" }
+  },
+  "id": 1
+}
+```
+
+These codes are additive-only. Renaming or removing a code is a breaking change
+and must be documented here.
+
 ## Operation History
 
 To ensure an auditable trail, `symoperate` maintains a local history of all GUI automation actions.
