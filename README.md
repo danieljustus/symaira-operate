@@ -3,9 +3,12 @@
 > Let an AI agent see and drive your Mac — locally, over MCP.
 
 [![CI](https://github.com/danieljustus/symaira-operate/actions/workflows/ci.yml/badge.svg)](https://github.com/danieljustus/symaira-operate/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/danieljustus/symaira-operate/coverage-data/badge.json)](https://github.com/danieljustus/symaira-operate/tree/coverage-data)
 [![Latest Release](https://img.shields.io/github/v/release/danieljustus/symaira-operate?sort=semver)](https://github.com/danieljustus/symaira-operate/releases/latest)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Swift](https://img.shields.io/badge/Swift-6.0-orange.svg)](https://swift.org)
+
+![Symaira Operate social preview](docs/assets/social-preview.png)
 
 `symoperate` is a native macOS desktop-automation **MCP server**. It exposes
 screenshots, the Accessibility tree, mouse/keyboard input, and app/window control
@@ -18,7 +21,7 @@ Part of the [Symaira](../ECOSYSTEM.md) family, and the agent-native sibling of
 tune = thermals/brightness/power.**
 
 > **Status: v0.2.4.** Working native implementation (rebranded from the author's
-> `mac-operator` prototype), 111 tests passing.
+> `mac-operator` prototype), 127 tests passing.
 
 ## Why symoperate?
 
@@ -46,35 +49,13 @@ brew install danieljustus/tap/symoperate
 open it, and move `symoperate` to `/usr/local/bin/` (or any directory on your
 `PATH`).
 
-### Permissions
-
-macOS requires **Accessibility** and **Screen Recording** permissions for the
-process that will actually host the `symoperate` MCP server. **These permissions
-are per-process** — granting them to `Terminal.app` does NOT make them available
-to an MCP host (e.g., Cursor, Claude Desktop) that runs `symoperate` via its
-MCP configuration.
-
-To grant permissions for your MCP host:
-
-1. **Identify the MCP host process** — e.g., `Cursor.app`, `Claude Desktop.app`,
-   or the editor/IDE you use with MCP.
-2. Go to **System Settings → Privacy & Security**.
-3. Add the host app to **Accessibility** and **Screen Recording**.
-4. Verify:
+Then grant permissions and verify the install:
 
 ```bash
+symoperate permissions grant accessibility
+symoperate permissions grant screen
 symoperate doctor
 ```
-
-The `doctor` output now includes a `source` block that identifies which process
-the reported TCC grants belong to. If you see a terminal or IDE listed instead
-of your MCP host, re-check your permissions setup.
-
-> ⚠️ **Important**: Running `symoperate permissions grant accessibility` or
-> `symoperate permissions grant screen` from a terminal will prompt you to
-> authorize the terminal app, not your MCP host. Always grant permissions
-> through System Settings for the process that will actually run `symoperate
-> serve`.
 
 ## Requirements
 
@@ -94,6 +75,8 @@ swift run -q symoperate doctor
 ```text
 symoperate serve                          Run the MCP server over stdio
 symoperate doctor                         Permission status + environment probes (JSON)
+symoperate version                        Print version and check for updates (JSON)
+symoperate history --json                 Print the local operation history (JSON)
 symoperate permissions status             Current macOS permissions
 symoperate permissions grant accessibility
 symoperate permissions grant screen
@@ -101,9 +84,10 @@ symoperate permissions grant screen
 
 ## MCP tools
 
-`snapshot`, `query_ui`, `list_apps`, `list_windows`, `click`, `type_text`,
-`press_keys`, `scroll`, `drag`, `launch_app`, `focus_window`, `menu_action`,
-`wait_for`, `permissions_status`.
+`snapshot`, `query_ui`, `query_ui_ocr`, `find_ui`, `list_apps`, `list_windows`,
+`list_displays`, `click`, `type_text`, `press_keys`, `scroll`, `drag`,
+`launch_app`, `focus_window`, `menu_action`, `wait_for`, `permissions_status`,
+`get_policy`, `set_policy`, `version`.
 
 Register with an MCP host:
 
@@ -130,4 +114,4 @@ without explicit user confirmation. See [AGENTS.md](AGENTS.md), [SAFETY_AUDIT.md
 
 ## License
 
-MIT © 2026 Daniel Justus.
+Apache-2.0 © 2026 Daniel Justus.
