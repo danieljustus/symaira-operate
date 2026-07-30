@@ -271,9 +271,25 @@ public struct UIQueryResultWithOCR: Codable, Sendable {
     }
 }
 
+/// The outcome of an automation action.
+///
+/// `ok` indicates the action completed without raising an error, not that the
+/// intended visible effect was confirmed. A `true` value means the event was
+/// submitted successfully to the system (mouse click posted, keystrokes
+/// enqueued, etc.). Callers should re-snapshot and inspect the UI to determine
+/// whether the desired state change actually occurred.
+///
+/// The optional `snapshot` field provides a fresh capture taken immediately
+/// after the action, and is the primary mechanism for verifying the outcome.
 public struct ActionResult: Codable, Sendable {
+    /// `true` when the action completed without throwing an error.
+    /// Does **not** imply the intended effect was observed — only that the
+    /// event was successfully posted.
     public let ok: Bool
+    /// Human-readable summary of what was done.
     public let message: String
+    /// Optional fresh snapshot captured immediately after the action.
+    /// Use this to verify the outcome rather than relying on `ok` alone.
     public let snapshot: Snapshot?
 
     public init(ok: Bool, message: String, snapshot: Snapshot? = nil) {

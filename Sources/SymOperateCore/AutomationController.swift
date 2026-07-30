@@ -167,7 +167,7 @@ public final class AutomationController {
         return try executeAction(name: "click", targets: targets) {
             let target = try resolvePoint(snapshotID: snapshotID, elementID: elementID, x: x, y: y)
             try input.click(at: target, button: button, doubleClick: doubleClick)
-            return "Click delivered at (\(Int(target.x)), \(Int(target.y)))."
+            return "Click event posted at (\(Int(target.x)), \(Int(target.y)))."
         }
     }
 
@@ -179,7 +179,7 @@ public final class AutomationController {
             }
             try guardAgainstSecureField()
             try input.typeText(text)
-            return "Typed \(text.count) characters."
+            return "\(text.count) keystroke events posted."
         }
     }
 
@@ -187,14 +187,14 @@ public final class AutomationController {
         return try executeAction(name: "press_keys", targets: ["keys": keys.joined(separator: "+")]) {
             try guardAgainstSecureField()
             try input.pressKeys(keys)
-            return "Pressed keys: \(keys.joined(separator: "+"))."
+            return "Key events posted: \(keys.joined(separator: "+"))."
         }
     }
 
     public func scroll(deltaX: Double = 0, deltaY: Double) throws -> ActionResult {
         return try executeAction(name: "scroll", targets: ["deltaX": String(deltaX), "deltaY": String(deltaY)]) {
             try input.scroll(deltaX: deltaX, deltaY: deltaY)
-            return "Scrolled by (\(deltaX), \(deltaY))."
+            return "Scroll event posted with delta (\(deltaX), \(deltaY))."
         }
     }
 
@@ -220,7 +220,7 @@ public final class AutomationController {
             let start = try resolvePoint(snapshotID: snapshotID, elementID: fromElementID, x: fromX, y: fromY)
             let end = try resolvePoint(snapshotID: snapshotID, elementID: toElementID, x: toX, y: toY)
             try input.drag(from: start, to: end, steps: 24)
-            return "Dragged from (\(Int(start.x)), \(Int(start.y))) to (\(Int(end.x)), \(Int(end.y)))."
+            return "Drag event posted from (\(Int(start.x)), \(Int(start.y))) to (\(Int(end.x)), \(Int(end.y)))."
         }
     }
 
@@ -243,14 +243,14 @@ public final class AutomationController {
 
         return try executeAction(name: "focus_window", targets: targets) {
             try apps.focusWindow(bundleID: bundleID, appName: appName, title: title)
-            return "Window focus updated."
+            return "Window-focus request dispatched."
         }
     }
 
     public func menuAction(path: [String]) throws -> ActionResult {
         return try executeAction(name: "menu_action", targets: ["path": path.joined(separator: " > ")]) {
             try accessibility.performMenuAction(path: path)
-            return "Menu action triggered: \(path.joined(separator: " > "))."
+            return "Menu action posted: \(path.joined(separator: " > "))."
         }
     }
 
