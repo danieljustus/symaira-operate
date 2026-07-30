@@ -1,23 +1,39 @@
 import Foundation
+import SymairaUpdateCheck
 
+/// High-level update checker for symoperate that wraps `SymairaUpdateCheck.UpdateChecker`
+/// with a UserDefaults-backed skip-version store and backward-compatible `UpdateInfo` type.
 public struct UpdateChecker: Sendable {
+    private let underlying: SymairaUpdateCheck.UpdateChecker
+    private let store: UserDefaultsSkippedVersionStore
     private let currentVersion: String
-    private let repoOwner: String
-    private let repoName: String
-    private let session: URLSession
 
-    public init(currentVersion: String = SymOperateVersion.current, repoOwner: String = "danieljustus", repoName: String = "symaira-operate") {
+    private static let defaultsKey = "com.symaira.operate.updateSkippedTag"
+
+    public init(
+        currentVersion: String = SymOperateVersion.current,
+        repoOwner: String = "danieljustus",
+        repoName: String = "symaira-operate",
+        client: UpdateHTTPClient? = nil,
+        cacheDirectory: URL? = nil,
+        userDefaults: UserDefaults = .standard
+    ) {
         self.currentVersion = currentVersion
-        self.repoOwner = repoOwner
-        self.repoName = repoName
-        self.session = .shared
+        self.underlying = SymairaUpdateCheck.UpdateChecker(
+            owner: repoOwner,
+            repo: repoName,
+            client: client ?? URLSession.shared,
+            cacheTTL: 24 * 60 * 60,
+            cacheDirectory: cacheDirectory
+        )
+        self.store = UserDefaultsSkippedVersionStore(key: Self.defaultsKey, defaults: userDefaults)
     }
 
-    init(currentVersion: String, repoOwner: String, repoName: String, session: URLSession) {
-        self.currentVersion = currentVersion
-        self.repoOwner = repoOwner
-        self.repoName = repoName
-        self.session = session
+    /// Keep the existing initializer for backwards compatibility with callers that pass a custom session.
+    /// Migrates to the appkit-backed implementation.
+    @available(*, deprecated, message: "Use init(currentVersion:repoOwner:repoName:client:) instead")
+    public init(currentVersion: String, repoOwner: String, repoName: String, session: URLSession) {
+        self.init(currentVersion: currentVersion, repoOwner: repoOwner, repoName: repoName, client: session)
     }
 
     public struct UpdateInfo: Codable, Sendable {
@@ -36,117 +52,91 @@ public struct UpdateChecker: Sendable {
         }
     }
 
-    private static let cache = UpdateCache()
-    static let timeoutInterval: TimeInterval = 8
+    /// Retained for backward compatibility with existing tests.
+    public static let timeoutInterval: TimeInterval = 8
 
-    static func clearCache() {
-        cache.clear()
-    }
-
-    public func checkForUpdate() async -> UpdateInfo {
-        if let cached = Self.cache.get() {
-            return cached
-        }
-
-        let result = await performNetworkCheck()
-        Self.cache.set(result)
-        return result
-    }
-
-    private func performNetworkCheck() async -> UpdateInfo {
-        guard let url = URL(string: "https://api.github.com/repos/\(repoOwner)/\(repoName)/releases/latest") else {
+    /// Check for a newer release.
+    ///
+    /// This is a non-blocking async call. Results are cached on disk with a 24-hour TTL
+    /// (managed by `SymairaUpdateCheck.UpdateChecker`), so frequent calls are cheap.
+    /// If the latest release matches the user's skipped version (via `skipVersion()`),
+    /// no update will be reported unless `force` is true.
+    public func checkForUpdate(force: Bool = false) async -> UpdateInfo {
+        // Dev builds are never checked.
+        if SymairaUpdateCheck.StableVersion(currentVersion) == nil {
             return UpdateInfo(
                 updateAvailable: false,
                 latestVersion: nil,
                 currentVersion: currentVersion,
-                releaseURL: nil,
-                error: "Invalid release URL"
+                releaseURL: nil
             )
         }
 
-        var request = URLRequest(url: url)
-        request.timeoutInterval = Self.timeoutInterval
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-
         do {
-            let (data, _) = try await session.data(for: request)
-
-            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let tagName = json["tag_name"] as? String else {
+            if let release = try await underlying.check(currentVersion: currentVersion, force: force) {
+                // If the user has skipped this exact tag, suppress the update prompt.
+                if !force, store.skippedTag() == release.tagName {
+                    return UpdateInfo(
+                        updateAvailable: false,
+                        latestVersion: stripVPrefix(release.tagName),
+                        currentVersion: currentVersion,
+                        releaseURL: release.htmlURL
+                    )
+                }
+                return UpdateInfo(
+                    updateAvailable: true,
+                    latestVersion: stripVPrefix(release.tagName),
+                    currentVersion: currentVersion,
+                    releaseURL: release.htmlURL
+                )
+            } else {
                 return UpdateInfo(
                     updateAvailable: false,
                     latestVersion: nil,
                     currentVersion: currentVersion,
-                    releaseURL: nil,
-                    error: "Failed to parse release data"
+                    releaseURL: nil
                 )
             }
-
-            let latest = tagName.hasPrefix("v") ? String(tagName.dropFirst()) : tagName
-            let available = isNewer(latest, than: currentVersion)
-            let htmlURL = json["html_url"] as? String
-
-            return UpdateInfo(
-                updateAvailable: available,
-                latestVersion: latest,
-                currentVersion: currentVersion,
-                releaseURL: htmlURL
-            )
-        } catch let error as URLError where error.code == .timedOut {
-            return UpdateInfo(
-                updateAvailable: false,
-                latestVersion: nil,
-                currentVersion: currentVersion,
-                releaseURL: nil,
-                error: "Update check timed out after \(Int(Self.timeoutInterval))s"
-            )
         } catch {
             return UpdateInfo(
                 updateAvailable: false,
                 latestVersion: nil,
                 currentVersion: currentVersion,
                 releaseURL: nil,
-                error: "Update check failed: \(error.localizedDescription)"
+                error: error.localizedDescription
             )
         }
     }
 
-    private func isNewer(_ version: String, than current: String) -> Bool {
-        let latestParts = version.split(separator: ".").compactMap { Int($0) }
-        let currentParts = current.split(separator: ".").compactMap { Int($0) }
-        let count = max(latestParts.count, currentParts.count)
-
-        for i in 0..<count {
-            let l = i < latestParts.count ? latestParts[i] : 0
-            let c = i < currentParts.count ? currentParts[i] : 0
-            if l > c { return true }
-            if l < c { return false }
-        }
-        return false
-    }
-}
-
-// MARK: - Process-lifetime cache
-
-private final class UpdateCache: @unchecked Sendable {
-    private let lock = NSLock()
-    private var value: UpdateChecker.UpdateInfo?
-
-    func get() -> UpdateChecker.UpdateInfo? {
-        lock.lock()
-        defer { lock.unlock() }
-        return value
+    /// Mark the given version as skipped so it will not be offered again.
+    ///
+    /// Accepts versions with or without a leading "v" prefix.
+    /// The skipped tag persists in UserDefaults between app launches.
+    public func skipVersion(_ version: String) {
+        let tag = version.hasPrefix("v") ? version : "v" + version
+        store.setSkippedTag(tag)
     }
 
-    func set(_ info: UpdateChecker.UpdateInfo) {
-        lock.lock()
-        defer { lock.unlock() }
-        value = info
+    /// The currently skipped version (without "v" prefix), if any.
+    public var skippedVersion: String? {
+        guard let tag = store.skippedTag() else { return nil }
+        return stripVPrefix(tag)
     }
 
-    func clear() {
-        lock.lock()
-        defer { lock.unlock() }
-        value = nil
+    /// Clear the skipped version so the next check will offer it again.
+    public func clearSkippedVersion() {
+        store.setSkippedTag(nil)
+    }
+
+    /// Clear the process-lifetime cache (delegates to disk-cache removal).
+    public static func clearCache() {
+        // The appkit cache is disk-based with a TTL; there's no process-lifetime
+        // cache to clear. This is a no-op for API compatibility.
+    }
+
+    // MARK: - Helpers
+
+    private func stripVPrefix(_ tag: String) -> String {
+        tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
     }
 }

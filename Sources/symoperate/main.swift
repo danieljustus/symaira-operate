@@ -8,6 +8,7 @@ enum Command: String {
     case permissions
     case version
     case history
+    case updates
 }
 
 private struct GrantResult: Codable {
@@ -25,6 +26,9 @@ func printUsage() {
       doctor                         Print permission status and environment checks (JSON).
       version                        Print version and check for updates.
       history --json                 Print the local operation history in JSON format.
+      updates check [--force]        Check for updates and print result (JSON).
+      updates skip [<version>]       Show skipped version, or skip a specific version.
+      updates clear-skip             Clear the skipped version.
       permissions status             Print the current macOS permissions.
       permissions grant accessibility  Trigger the Accessibility permission prompt.
       permissions grant screen         Trigger the Screen Recording permission prompt.
@@ -65,6 +69,15 @@ do {
 
     switch first {
     case Command.serve.rawValue:
+        // Non-blocking update check on launch — prints to stderr, never blocks.
+        Task { @Sendable in
+            let checker = UpdateChecker()
+            let info = await checker.checkForUpdate()
+            if info.updateAvailable, let latest = info.latestVersion, let url = info.releaseURL {
+                FileHandle.standardError.write(Data("\n⚠️  Update available: v\(latest) → \(url)\n".utf8))
+                FileHandle.standardError.write(Data("   Use `symoperate updates skip \(latest)` to dismiss this version.\n\n".utf8))
+            }
+        }
         Task { @Sendable in
             do {
                 try await MCPServer(controller: AutomationController()).run()
@@ -214,6 +227,45 @@ do {
             try printJSON(GrantResult(prompted: success))
         default:
             throw AutomationError.invalidArgument("Unknown permissions subcommand '\(subcommand)'.")
+        }
+    case Command.updates.rawValue:
+        let rest = Array(args.dropFirst())
+        guard let subcommand = rest.first else {
+            FileHandle.standardError.write(Data("usage: symoperate updates check [--force] | skip [<version>] | clear-skip\n".utf8))
+            exit(ExitCode.invalidArgument.rawValue)
+        }
+        switch subcommand {
+        case "check":
+            Task { @Sendable in
+                let checker = UpdateChecker()
+                let force = rest.contains("--force")
+                let info = await checker.checkForUpdate(force: force)
+                try? printJSON(info)
+                exit(0)
+            }
+            dispatchMain()
+        case "skip":
+            let version = rest.dropFirst().first
+            if let ver = version {
+                let checker = UpdateChecker()
+                checker.skipVersion(ver)
+                let msg = ["skipped": ver]
+                try printJSON(msg)
+            } else {
+                let checker = UpdateChecker()
+                if let skipped = checker.skippedVersion {
+                    try printJSON(["skipped": skipped])
+                } else {
+                    try printJSON(["skipped": "none"])
+                }
+            }
+        case "clear-skip":
+            let checker = UpdateChecker()
+            checker.clearSkippedVersion()
+            try printJSON(["skipped": "none"])
+        default:
+            FileHandle.standardError.write(Data("usage: symoperate updates check [--force] | skip [<version>] | clear-skip\n".utf8))
+            exit(ExitCode.invalidArgument.rawValue)
         }
     default:
         printUsage()

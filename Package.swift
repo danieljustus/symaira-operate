@@ -11,9 +11,15 @@ let package = Package(
         .library(name: "SymOperateMCP", targets: ["SymOperateMCP"]),
         .executable(name: "symoperate", targets: ["symoperate"]),
     ],
+    dependencies: [
+        .package(url: "https://github.com/danieljustus/symaira-appkit.git", exact: "0.6.0"),
+    ],
     targets: [
         .target(
             name: "SymOperateCore",
+            dependencies: [
+                .product(name: "SymairaUpdateCheck", package: "symaira-appkit"),
+            ],
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("ApplicationServices"),
@@ -29,7 +35,7 @@ let package = Package(
         ),
         .testTarget(
             name: "SymOperateCoreTests",
-            dependencies: ["SymOperateCore", "SymOperateMCP"]
+            dependencies: ["SymOperateCore", "SymOperateMCP", .product(name: "SymairaUpdateCheck", package: "symaira-appkit")]
         ),
         .testTarget(
             name: "SymOperateSmokeTests",
