@@ -58,6 +58,7 @@ jobs:
           name: coverage-data
           path: .build/coverage.json
           retention-days: 7
+          if-no-files-found: error
 
   publish-coverage-data:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
