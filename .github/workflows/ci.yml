@@ -84,7 +84,6 @@ jobs:
           else
             git checkout --orphan coverage-data
           fi
-          cp coverage.json badge.json badge.svg .
           git add -f coverage.json badge.json badge.svg
           git commit --allow-empty -m "chore: update coverage data [skip ci]"
           git push origin coverage-data --force
