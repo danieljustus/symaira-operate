@@ -16,10 +16,10 @@ coverage:
 	@rm -f .build/coverage.profdata .build/coverage.json
 	@find .build -type d -name codecov -exec find {} -name '*.profraw' -print0 \; 2>/dev/null | xargs -0 xcrun llvm-profdata merge -sparse -o .build/coverage.profdata 2>/dev/null; \
 	if [ -f .build/coverage.profdata ]; then \
-	  BINARY="$$(find .build -name "SymOperateCore.o" -type f | head -1)"; \
-	  if [ -n "$$BINARY" ]; then \
+	  BINARIES="$$(find .build \( -path '*/SymOperateCore.build/*.o' -o -name 'SymOperateCore.o' \) -type f)"; \
+	  if [ -n "$$BINARIES" ]; then \
 	    xcrun llvm-cov report \
-	      "$$BINARY" \
+	      $$BINARIES \
 	      --instr-profile=.build/coverage.profdata \
 	      --use-color=false \
 	      Sources/SymOperateCore/ > .build/coverage-report.txt; \
