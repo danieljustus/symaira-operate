@@ -3,7 +3,7 @@
 Native macOS desktop-automation MCP server (Swift 6 toolchain, AppKit /
 ApplicationServices / ScreenCaptureKit). Lets an AI agent observe and drive the
 Mac GUI: screenshots, the Accessibility tree, mouse/keyboard input, and app/
-window control — locally, over stdio MCP. Public repo, MIT-licensed. Part of the
+window control — locally, over stdio MCP. Public repo, Apache-2.0-licensed. Part of the
 Symaira family — see `../AGENTS.md` / `../ECOSYSTEM.md`.
 
 It is the agent-native sibling of `symaira-tune` (hardware knobs): operate = GUI
