@@ -1,21 +1,28 @@
 # Roadmap
 
-## v0.1 (current)
+## v0.1 (shipped)
 
-- [x] Rebrand from `mac-operator` to Symaira conventions; builds, 106 tests pass.
+- [x] Rebrand from `mac-operator` to Symaira conventions; builds, 29 tests pass.
 - [x] MCP tools: snapshot, query_ui, list_apps, list_windows, click, type_text,
       press_keys, scroll, drag, launch_app, focus_window, menu_action, wait_for,
       permissions_status.
 - [x] Safety guards: destructive-control refusal, secure-field block, ephemeral
       element cache.
 
-## v0.2 — robustness
+## v0.2 (current) — robustness
 
-- [x] Multi-display selection (currently main display only).
+- [x] Multi-display selection (`list_displays`, screenshots/UI queries by
+      display ID or index).
 - [x] Window-scoped capture.
-- [x] OCR fallback for apps with weak Accessibility metadata.
-- [x] Stronger, configurable action-policy checks (allow/deny lists).
-- [x] Richer UI targeting (roles, predicates).
+- [x] OCR fallback (`query_ui_ocr`) via Vision framework for apps with weak
+      Accessibility metadata.
+- [x] Stronger, configurable action-policy checks (`get_policy`/`set_policy`
+      allow/deny lists).
+- [x] Richer UI targeting (`find_ui` predicates by role, title, label, frame).
+- [x] `version` MCP tool + CLI command; `history --json` operation log.
+- [x] Notarized DMG + Homebrew cask (`danieljustus/tap/symoperate`).
+- [x] Tighten to Swift 6 strict concurrency (swift-tools-version 6.0).
+- 127 tests passing (114 SymOperateCoreTests + 13 SymOperateSmokeTests).
 
 ## v0.3 — ecosystem alignment
 
@@ -27,8 +34,7 @@
 
 ## Infra
 
-- [ ] Notarized DMG + Homebrew cask in `../homebrew-tap` (mirror symaira-terminal).
-- [ ] CI on macOS runner (build + test); SwiftLint gate.
-- [x] Tighten to Swift 6 strict concurrency (AppKit/ScreenCaptureKit MainActor
-      isolation; currently Swift 5 language mode).
-- [ ] Update checker (GitHub releases), ecosystem convention.
+- [x] Notarized DMG + Homebrew cask in `../homebrew-tap` (mirror symaira-terminal).
+- [x] CI on macOS runner (build + test).
+- [ ] SwiftLint gate.
+- [x] Update checker (GitHub releases), ecosystem convention.

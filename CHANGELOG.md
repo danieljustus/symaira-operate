@@ -5,6 +5,23 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.4]
+
+### Fixed
+- Sign binary before DMG packaging so notarization succeeds (#54).
+
+## [0.2.3]
+
+### Added
+- CI verifies the DMG asset and publishes the Homebrew cask on release (#52).
+
+## [0.2.2]
+
+### Changed
+- Community/repo hygiene: README, security policy, labels, and project-field
+  fixes from a `gh-audit` pass (#48).
+- Canonical Apache-2.0 license text (#49).
+
 ## [0.2.1]
 
 ### Security
