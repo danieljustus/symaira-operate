@@ -85,6 +85,50 @@ symoperate permissions grant accessibility
 symoperate permissions grant screen
 ```
 
+### Terminal demo
+
+A real first-run of `symoperate doctor` on a machine where the Accessibility
+permission is not yet granted — it reports exactly what is missing instead of
+failing silently:
+
+```console
+$ symoperate doctor
+{
+  "capabilities" : {
+    "accessibility" : false,
+    "multi_display" : false,
+    "ocr" : true,
+    "screenshot" : true
+  },
+  "environment" : {
+    "appsCount" : 8,
+    "displaysCount" : 1,
+    "macOSVersion" : "27.0.0",
+    "platform" : "macOS",
+    "swiftVersion" : "unknown"
+  },
+  "ok" : false,
+  "permissions" : {
+    "accessibilityGranted" : false,
+    "screenRecordingGranted" : true,
+    "source" : {
+      "executablePath" : "/path/to/symoperate",
+      "note" : "These booleans describe the TCC grants held by the process identified above. On macOS, TCC permissions (Accessibility, Screen Recording) are per-process — granting them to the launching app (e.g., Terminal, Cursor) does NOT make them available to the MCP host that launched symoperate. Grant permissions from the process that will actually be using symoperate's MCP server.",
+      "pid" : 30337,
+      "ppid" : 30303
+    }
+  },
+  "recommendations" : [
+    "Accessibility permission denied."
+  ],
+  "version" : "0.4.0"
+}
+```
+
+Grant the missing permissions (`symoperate permissions grant accessibility`)
+and re-run `doctor` — `ok` flips to `true` once every capability is available.
+(`executablePath`/`pid` above reflect the machine the output was captured on.)
+
 ## MCP tools
 
 `snapshot`, `query_ui`, `query_ui_ocr`, `find_ui`, `list_apps`, `list_windows`,
