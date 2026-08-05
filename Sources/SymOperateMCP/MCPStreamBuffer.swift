@@ -88,12 +88,11 @@ struct MCPStreamBuffer {
         guard let headerString = String(data: headerLine, encoding: .utf8) else {
             throw AutomationError.operationFailed("Failed to decode MCP header.")
         }
-        let headerTrimmed = headerString.trimmingCharacters(in: .whitespacesAndNewlines)
-        let parts = headerTrimmed.components(separatedBy: ":")
-        guard parts.count >= 2, parts[0].lowercased() == "content-length" else {
+        let parts = headerString.split(separator: ":", maxSplits: 1)
+        guard parts.count == 2, parts[0].trimmingCharacters(in: .whitespaces).lowercased() == "content-length" else {
             throw AutomationError.operationFailed("Missing Content-Length header.")
         }
-        let value = parts[1..<parts.count].joined(separator: ":").trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
         guard let length = Int(value) else {
             throw AutomationError.operationFailed("Invalid Content-Length header.")
         }
@@ -118,11 +117,11 @@ struct MCPStreamBuffer {
                     throw AutomationError.operationFailed("Unexpected end of input while reading MCP payload.")
                 }
                 data.append(chunk)
-            } else {
-                let take = min(remaining, pending.count)
-                data.append(pending.prefix(take))
-                pending.removeFirst(take)
+                continue
             }
+            let take = min(remaining, pending.count)
+            data.append(pending.prefix(take))
+            pending.removeFirst(take)
         }
         return data
     }
