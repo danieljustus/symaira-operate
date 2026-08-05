@@ -728,3 +728,162 @@ extension SafetyPolicyTests {
         }
     }
 }
+
+extension SafetyPolicyTests {
+    // MARK: - Permission Gate Tests (Issue #85)
+
+    private func makePermissionGatedController(granted: PermissionFlags) -> AutomationController {
+        AutomationController(
+            permissions: MockPermissionService(),
+            screen: MockScreenService(),
+            apps: MockAppService(),
+            accessibility: MockAccessibilityService(),
+            input: MockInputService(),
+            ocr: MockOCRService(),
+            queryService: MockUIQueryService(),
+            actionPolicy: ActionPolicy(grantedPermissions: granted)
+        )
+    }
+
+    private func assertPermissionDenied(
+        _ expression: @autoclosure () throws -> Any?,
+        contains expected: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        do {
+            _ = try expression()
+            XCTFail("Expected permissionDenied containing '\(expected)'", file: file, line: line)
+        } catch let error as AutomationError {
+            if case .permissionDenied(let message) = error {
+                XCTAssertTrue(
+                    message.contains(expected),
+                    "Expected message containing '\(expected)', got: \(message)",
+                    file: file, line: line
+                )
+            } else {
+                XCTFail("Expected permissionDenied, got \(error)", file: file, line: line)
+            }
+        } catch {
+            XCTFail("Expected AutomationError, got \(error)", file: file, line: line)
+        }
+    }
+
+    // MARK: capture
+
+    func testSnapshotRequiresCapturePermission() throws {
+        let restricted = makePermissionGatedController(granted: [.input])
+        assertPermissionDenied(try restricted.snapshot(), contains: "capture")
+    }
+
+    func testQueryUIRequiresCapturePermission() throws {
+        let restricted = makePermissionGatedController(granted: [.input])
+        assertPermissionDenied(try restricted.queryUI(), contains: "capture")
+    }
+
+    func testFindUIRequiresCapturePermission() throws {
+        let restricted = makePermissionGatedController(granted: [.input])
+        assertPermissionDenied(
+            try restricted.findUI(predicate: UIElementPredicate(title: "Save")),
+            contains: "capture"
+        )
+    }
+
+    // MARK: input
+
+    func testClickRequiresInputPermission() throws {
+        let restricted = makePermissionGatedController(granted: [.capture])
+        assertPermissionDenied(try restricted.click(x: 10, y: 10), contains: "input")
+    }
+
+    func testTypeTextRequiresInputPermission() throws {
+        let restricted = makePermissionGatedController(granted: [.capture])
+        assertPermissionDenied(try restricted.typeText("hello"), contains: "input")
+    }
+
+    func testPressKeysRequiresInputPermission() throws {
+        let restricted = makePermissionGatedController(granted: [.capture])
+        assertPermissionDenied(try restricted.pressKeys(["a"]), contains: "input")
+    }
+
+    func testScrollRequiresInputPermission() throws {
+        let restricted = makePermissionGatedController(granted: [.capture])
+        assertPermissionDenied(try restricted.scroll(deltaY: 10), contains: "input")
+    }
+
+    func testDragRequiresInputPermission() throws {
+        let restricted = makePermissionGatedController(granted: [.capture])
+        assertPermissionDenied(try restricted.drag(fromX: 0, fromY: 0, toX: 10, toY: 10), contains: "input")
+    }
+
+    // MARK: appControl
+
+    func testLaunchAppRequiresAppControlPermission() throws {
+        let restricted = makePermissionGatedController(granted: [.capture])
+        assertPermissionDenied(try restricted.launchApp(bundleID: "com.apple.TextEdit"), contains: "app_control")
+    }
+
+    func testFocusWindowRequiresAppControlPermission() throws {
+        let restricted = makePermissionGatedController(granted: [.capture])
+        assertPermissionDenied(try restricted.focusWindow(appName: "TextEdit"), contains: "app_control")
+    }
+
+    // MARK: menuAction
+
+    func testMenuActionRequiresMenuActionPermission() throws {
+        let restricted = makePermissionGatedController(granted: [.capture])
+        assertPermissionDenied(try restricted.menuAction(path: ["File", "Save"]), contains: "menu_action")
+    }
+
+    // MARK: default .all behavior (no regression)
+
+    func testDefaultPolicyAllStillPermitsActions() throws {
+        // The default ActionPolicy() grants .all — the permission gate must not fire.
+        let launched = try controller.launchApp(bundleID: "com.apple.TextEdit")
+        XCTAssertTrue(launched.ok)
+        let typed = try controller.typeText("hello")
+        XCTAssertTrue(typed.ok)
+        let menu = try controller.menuAction(path: ["File", "Save"])
+        XCTAssertTrue(menu.ok)
+
+        // snapshot reaches the mock screen service (which reports unavailable),
+        // NOT the permission gate.
+        do {
+            _ = try controller.snapshot()
+            XCTFail("Expected the mock screen service to report unavailable")
+        } catch let error as AutomationError {
+            if case .permissionDenied = error {
+                XCTFail("Default .all policy must not refuse snapshot, got: \(error)")
+            }
+        }
+    }
+
+    func testDestructiveGuardStillFiresWithAllPermissions() throws {
+        // Explicit .all: the destructive-keyword guard must still refuse (no regression).
+        let ax = MockAccessibilityService()
+        let allAccess = AutomationController(
+            permissions: MockPermissionService(),
+            screen: MockScreenService(),
+            apps: MockAppService(),
+            accessibility: ax,
+            input: MockInputService(),
+            ocr: MockOCRService(),
+            queryService: MockUIQueryService(),
+            actionPolicy: ActionPolicy(grantedPermissions: .all)
+        )
+        let frame = RectValue(x: 100, y: 100, width: 50, height: 30)
+        ax.prepopulate(
+            snapshotID: "snap-delete-all",
+            elementID: "delete-btn",
+            role: "AXButton",
+            title: "Delete",
+            label: nil,
+            value: nil,
+            frame: frame
+        )
+        assertPermissionDenied(
+            try allAccess.click(snapshotID: "snap-delete-all", elementID: "delete-btn"),
+            contains: "destructive"
+        )
+    }
+}

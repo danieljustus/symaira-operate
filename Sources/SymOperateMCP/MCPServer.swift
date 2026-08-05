@@ -208,13 +208,14 @@ public final class MCPServer {
                 ],
             ]),
             tool("permissions_status", description: "Report screen recording and accessibility permission status.", input: [:]),
-            tool("get_policy", description: "Get the current action policy (deny/allow keywords, allowed bundle IDs).", input: [:]),
-            tool("set_policy", description: "Update the action policy. Extends defaults; cannot weaken the built-in safety guard.", input: [
+            tool("get_policy", description: "Get the current action policy (deny/allow keywords, allowed bundle IDs, granted permissions).", input: [:]),
+            tool("set_policy", description: "Update the action policy. Extends defaults; cannot weaken the built-in safety guard. Requires the policy_modify permission. When granted_permissions is provided it REPLACES the full granted permission set (defaults to .all when absent).", input: [
                 "type": "object",
                 "properties": [
                     "extra_deny_keywords": ["type": "array", "items": ["type": "string"], "description": "Additional keywords to block."],
                     "allow_keywords": ["type": "array", "items": ["type": "string"], "description": "Keywords to allow (overrides deny)."],
                     "allow_bundle_ids": ["type": "array", "items": ["type": "string"], "description": "Bundle IDs to exempt from destructive checks."],
+                    "granted_permissions": ["type": "array", "items": ["type": "string"], "description": "Permission flag names to grant: capture, input, app_control, menu_action, destructive_action, secure_field_access, policy_modify. Replaces the current set when present."],
                 ],
             ]),
             tool("version", description: "Print current version and check for updates from GitHub releases.", input: [:]),
@@ -312,8 +313,15 @@ public final class MCPServer {
         case "permissions_status":
             payload = controller.permissionsStatus()
         case "get_policy":
-            payload = controller.actionPolicy
+            payload = policyPayload()
         case "set_policy":
+            // Gate BEFORE mutating: an agent without policy_modify cannot change
+            // the policy — including restricting its own permission set.
+            if let violation = controller.actionPolicy.firstViolation(requiredPermission: .policyModify) {
+                throw AutomationError.permissionDenied(
+                    "Permission denied: the '\(violation.flagNames.joined(separator: ", "))' permission is required for set_policy."
+                )
+            }
             if let extraDeny = arguments["extra_deny_keywords"] as? [String] {
                 for kw in extraDeny { controller.actionPolicy.addDenyKeyword(kw) }
             }
@@ -323,7 +331,11 @@ public final class MCPServer {
             if let allowBundle = arguments["allow_bundle_ids"] as? [String] {
                 for bid in allowBundle { controller.actionPolicy.allowBundleID(bid) }
             }
-            payload = controller.actionPolicy
+            if let granted = arguments["granted_permissions"] as? [String] {
+                // REPLACE (not union) the granted set with the parsed flags.
+                controller.actionPolicy.grantedPermissions = PermissionFlags.parse(names: granted)
+            }
+            payload = policyPayload()
         case "find_ui":
             let predicate = UIElementPredicate(
                 role: string(arguments["role"]),
@@ -365,6 +377,19 @@ public final class MCPServer {
         return try JSONSerialization.jsonObject(with: data)
     }
 
+    /// Human-readable policy snapshot for get_policy/set_policy responses.
+    /// `granted_permissions` is the array of granted flag names so agents can
+    /// classify refusals without decoding OptionSet raw values.
+    private func policyPayload() -> PolicyPayload {
+        let policy = controller.actionPolicy
+        return PolicyPayload(
+            extraDenyKeywords: Array(policy.extraDenyKeywords).sorted(),
+            allowedKeywords: Array(policy.allowedKeywords).sorted(),
+            allowedBundleIDs: Array(policy.allowedBundleIDs).sorted(),
+            grantedPermissions: policy.grantedPermissions.flagNames
+        )
+    }
+
     private func textSummary(for tool: String, payload: Any) -> String {
         guard
             let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
@@ -398,22 +423,31 @@ extension MCPServer {
     private func sendRefusal(id: Any?, code: String, message: String) throws {
         var payload: [String: Any] = [
             "jsonrpc": "2.0",
-            "result": [
-                "isError": false,
-                "content": [
-                    ["type": "text", "text": message],
-                ],
-                "structuredContent": [
-                    "status": "refused",
-                    "refusal": [
-                        "code": code,
-                        "message": message,
-                    ],
-                ],
-            ],
+            "result": Self.refusalPayload(code: code, message: message),
         ]
         if let id { payload["id"] = id }
         try send(payload)
+    }
+
+    /// Builds the JSON-RPC result payload for a classified safety refusal.
+    /// Refusals are deliberately NOT JSON-RPC errors (`isError: false`) and
+    /// carry a stable machine-readable `refusal.code` for agent-side
+    /// classification. Every `.permissionDenied` — destructive-keyword guard
+    /// or permission gate — flows through this same payload shape.
+    static func refusalPayload(code: String, message: String) -> [String: Any] {
+        [
+            "isError": false,
+            "content": [
+                ["type": "text", "text": message],
+            ],
+            "structuredContent": [
+                "status": "refused",
+                "refusal": [
+                    "code": code,
+                    "message": message,
+                ],
+            ],
+        ]
     }
 
     private func sendError(id: Any?, code: Int, message: String, data: [String: Any]? = nil) throws {
@@ -574,5 +608,22 @@ private struct AnyEncodable: Encodable {
 
     func encode(to encoder: Encoder) throws {
         try encodeImpl(encoder)
+    }
+}
+
+/// Encodable snapshot of the action policy for get_policy/set_policy responses.
+/// `grantedPermissions` is exposed on the wire as `granted_permissions` — the
+/// array of granted flag names in canonical order.
+private struct PolicyPayload: Encodable {
+    let extraDenyKeywords: [String]
+    let allowedKeywords: [String]
+    let allowedBundleIDs: [String]
+    let grantedPermissions: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case extraDenyKeywords
+        case allowedKeywords
+        case allowedBundleIDs
+        case grantedPermissions = "granted_permissions"
     }
 }
