@@ -174,13 +174,7 @@ public final class ScreenService: ScreenServiceProtocol {
         }
 
         if let error = errorBox.value {
-            let nsError = error as NSError
-            if nsError.domain == "com.apple.ScreenCaptureKit" {
-                if nsError.code == -3801 {
-                    throw AutomationError.permissionDenied("Screen Recording permission is denied. Enable it in System Settings > Privacy & Security > Screen Recording.")
-                }
-            }
-            throw AutomationError.operationFailed("Screen capture failed: \(error.localizedDescription)")
+            throw Self.classifyCaptureError(error, context: "Screen capture")
         }
 
         guard let image = box.value else {
@@ -234,13 +228,7 @@ public final class ScreenService: ScreenServiceProtocol {
         }
 
         if let error = errorBox.value {
-            let nsError = error as NSError
-            if nsError.domain == "com.apple.ScreenCaptureKit" {
-                if nsError.code == -3801 {
-                    throw AutomationError.permissionDenied("Screen Recording permission is denied. Enable it in System Settings > Privacy & Security > Screen Recording.")
-                }
-            }
-            throw AutomationError.operationFailed("Window capture failed: \(error.localizedDescription)")
+            throw Self.classifyCaptureError(error, context: "Window capture")
         }
 
         guard let image = box.value else {
@@ -248,6 +236,34 @@ public final class ScreenService: ScreenServiceProtocol {
         }
 
         return (image, rectBox.value ?? CGRect.zero)
+    }
+
+    /// Maps a ScreenCaptureKit capture failure to the appropriate `AutomationError`.
+    ///
+    /// Screen Recording TCC denials are classified as `.permissionDenied` so MCP
+    /// clients receive a classified refusal instead of a generic `operationFailed`.
+    /// Detection covers the ScreenCaptureKit `-3801` code, the `com.apple.TCC`
+    /// error domain, and localized denial messages (e.g. German
+    /// "Benutzer:in hat TCCs für die Aufnahme durch Apps, Fenster, Displays abgelehnt").
+    static func classifyCaptureError(_ error: Error, context: String) -> AutomationError {
+        if Self.isScreenRecordingPermissionDenied(error) {
+            return AutomationError.permissionDenied(
+                "Screen Recording permission is denied. Enable it in System Settings > Privacy & Security > Screen Recording."
+            )
+        }
+        return AutomationError.operationFailed("\(context) failed: \(error.localizedDescription)")
+    }
+
+    private static func isScreenRecordingPermissionDenied(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        if nsError.domain == "com.apple.ScreenCaptureKit", nsError.code == -3801 {
+            return true
+        }
+        if nsError.domain == "com.apple.TCC" {
+            return true
+        }
+        let message = error.localizedDescription.lowercased()
+        return message.contains("denied") || message.contains("abgelehnt")
     }
 
     private func windowBounds(for windowID: Int) -> CGRect {
