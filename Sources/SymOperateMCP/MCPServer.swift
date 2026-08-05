@@ -6,8 +6,10 @@ public final class MCPServer {
     private let decoder = JSONDecoder()
     private let encoder = JSONEncoder()
 
-    /// Maximum allowed MCP message size (50 MB) to prevent unbounded memory allocation.
-    private static let maxMessageSize = 50 * 1024 * 1024
+    /// Buffered stdin reader shared across all message reads so that bytes
+    /// read ahead of the current frame (chunked 4096-byte reads) are carried
+    /// over instead of being lost or re-read byte-by-byte.
+    private var stream = MCPStreamBuffer()
 
     public init(controller: AutomationController = AutomationController()) {
         self.controller = controller
@@ -16,7 +18,7 @@ public final class MCPServer {
 
     public func run() async throws {
         let stdin = FileHandle.standardInput
-        while let message = try readMessage(from: stdin) {
+        while let message = try stream.readMessage(from: stdin) {
             guard
                 let object = try JSONSerialization.jsonObject(with: message) as? [String: Any],
                 let method = object["method"] as? String
@@ -476,84 +478,6 @@ extension MCPServer {
         FileHandle.standardOutput.write(data)
         FileHandle.standardOutput.write(Data([0x0A])) // newline
     }
-}
-
-// MARK: - Read helpers
-
-extension MCPServer {
-    /// Read one MCP message from stdin.
-    ///
-    /// Accepts both standard MCP newline-delimited framing (one JSON object per
-    /// line) and legacy LSP Content-Length framing for backward compatibility
-    /// with hosts that cannot be reconfigured.
-    private func readMessage(from handle: FileHandle) throws -> Data? {
-        let data = try readLine(from: handle)
-        guard let data else { return nil }
-        guard !data.isEmpty else { return nil }
-
-        // Detect Content-Length framing by peeking for the header prefix.
-        if data.count >= 15,
-           let prefix = String(data: data[0..<15], encoding: .utf8),
-           prefix.lowercased().hasPrefix("content-length:") {
-            return try readContentLengthMessage(from: handle, headerLine: data)
-        }
-
-        // Newline-delimited: the entire line is the JSON message.
-        guard data.count <= Self.maxMessageSize else {
-            throw AutomationError.operationFailed("MCP message size \(data.count) exceeds maximum allowed size of \(Self.maxMessageSize) bytes.")
-        }
-        return data
-    }
-
-    /// Read one line (until newline) from the file handle.
-    private func readLine(from handle: FileHandle) throws -> Data? {
-        var data = Data()
-        while true {
-            guard let chunk = try handle.read(upToCount: 1), !chunk.isEmpty else {
-                return data.isEmpty ? nil : data
-            }
-            if chunk[0] == 0x0A { // newline
-                return data
-            }
-            data.append(chunk)
-        }
-    }
-
-    /// Parse a Content-Length-framed message and return its body.
-    /// The header line has already been read into `headerLine`.
-    private func readContentLengthMessage(from handle: FileHandle, headerLine: Data) throws -> Data? {
-        guard let headerString = String(data: headerLine, encoding: .utf8) else {
-            throw AutomationError.operationFailed("Failed to decode MCP header.")
-        }
-        let headerTrimmed = headerString.trimmingCharacters(in: .whitespacesAndNewlines)
-        let parts = headerTrimmed.components(separatedBy: ":")
-        guard parts.count >= 2, parts[0].lowercased() == "content-length" else {
-            throw AutomationError.operationFailed("Missing Content-Length header.")
-        }
-        let value = parts[1..<parts.count].joined(separator: ":").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let length = Int(value) else {
-            throw AutomationError.operationFailed("Invalid Content-Length header.")
-        }
-        guard length <= Self.maxMessageSize else {
-            throw AutomationError.operationFailed("MCP message size \(length) exceeds maximum allowed size of \(Self.maxMessageSize) bytes.")
-        }
-        // Consume the blank line after the header
-        _ = try? handle.read(upToCount: 2) // \r\n
-        return try readBytes(from: handle, count: length)
-    }
-
-    private func readBytes(from handle: FileHandle, count: Int) throws -> Data {
-        var data = Data()
-        while data.count < count {
-            let remaining = count - data.count
-            guard let chunk = try handle.read(upToCount: remaining), !chunk.isEmpty else {
-                throw AutomationError.operationFailed("Unexpected end of input while reading MCP payload.")
-            }
-            data.append(chunk)
-        }
-        return data
-    }
-
 }
 
 private extension MCPServer {
