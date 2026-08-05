@@ -209,15 +209,7 @@ public final class MCPServer {
             ]),
             tool("permissions_status", description: "Report screen recording and accessibility permission status.", input: [:]),
             tool("get_policy", description: "Get the current action policy (deny/allow keywords, allowed bundle IDs, granted permissions).", input: [:]),
-            tool("set_policy", description: "Update the action policy. Extends defaults; cannot weaken the built-in safety guard. Requires the policy_modify permission. When granted_permissions is provided it REPLACES the full granted permission set (defaults to .all when absent).", input: [
-                "type": "object",
-                "properties": [
-                    "extra_deny_keywords": ["type": "array", "items": ["type": "string"], "description": "Additional keywords to block."],
-                    "allow_keywords": ["type": "array", "items": ["type": "string"], "description": "Keywords to allow (overrides deny)."],
-                    "allow_bundle_ids": ["type": "array", "items": ["type": "string"], "description": "Bundle IDs to exempt from destructive checks."],
-                    "granted_permissions": ["type": "array", "items": ["type": "string"], "description": "Permission flag names to grant: capture, input, app_control, menu_action, destructive_action, secure_field_access, policy_modify. Replaces the current set when present."],
-                ],
-            ]),
+            setPolicyToolSchema(),
             tool("version", description: "Print current version and check for updates from GitHub releases.", input: [:]),
         ]
     }
@@ -228,6 +220,20 @@ public final class MCPServer {
             "description": description,
             "inputSchema": input.isEmpty ? ["type": "object", "properties": [:]] : input,
         ]
+    }
+
+    /// Schema of the `set_policy` tool. Kept in its own function so `tools()`
+    /// stays within SwiftLint's function-body budget.
+    private func setPolicyToolSchema() -> [String: Any] {
+        tool("set_policy", description: "Update the action policy. Extends defaults; cannot weaken the built-in safety guard. Requires the policy_modify permission. When granted_permissions is provided it REPLACES the full granted permission set (defaults to .all when absent).", input: [
+            "type": "object",
+            "properties": [
+                "extra_deny_keywords": ["type": "array", "items": ["type": "string"], "description": "Additional keywords to block."],
+                "allow_keywords": ["type": "array", "items": ["type": "string"], "description": "Keywords to allow (overrides deny)."],
+                "allow_bundle_ids": ["type": "array", "items": ["type": "string"], "description": "Bundle IDs to exempt from destructive checks."],
+                "granted_permissions": ["type": "array", "items": ["type": "string"], "description": "Permission flag names to grant: capture, input, app_control, menu_action, destructive_action, secure_field_access, policy_modify. Replaces the current set when present."],
+            ],
+        ])
     }
 
     private func callTool(params: [String: Any]) async throws -> [String: Any] {
