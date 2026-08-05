@@ -203,3 +203,85 @@ final class MCPServerTests: XCTestCase {
         XCTAssertTrue(description.contains("optional"), "snapshot description should note both parameters are optional")
     }
 }
+
+extension MCPServerTests {
+    // MARK: - Permission Gate Tests (Issue #85)
+
+    func testSetPolicyGrantedPermissionsRestrictsAndGetPolicyRoundTrips() async throws {
+        let setResult = try await server.dispatch(method: "tools/call", params: [
+            "name": "set_policy",
+            "arguments": ["granted_permissions": ["capture", "input"]],
+        ])
+        XCTAssertEqual(setResult["isError"] as? Bool, false)
+
+        let getResult = try await server.dispatch(method: "tools/call", params: ["name": "get_policy", "arguments": [:]])
+        let policy = getResult["structuredContent"] as? [String: Any]
+        XCTAssertEqual(policy?["granted_permissions"] as? [String], ["capture", "input"])
+    }
+
+    func testSetPolicyGrantedPermissionsReplacesNotUnions() async throws {
+        _ = try await server.dispatch(method: "tools/call", params: [
+            "name": "set_policy", "arguments": ["granted_permissions": ["capture", "policy_modify"]],
+        ])
+        _ = try await server.dispatch(method: "tools/call", params: [
+            "name": "set_policy", "arguments": ["granted_permissions": ["input", "policy_modify"]],
+        ])
+        let getResult = try await server.dispatch(method: "tools/call", params: ["name": "get_policy", "arguments": [:]])
+        let policy = getResult["structuredContent"] as? [String: Any]
+        // REPLACE semantics: the earlier "capture" must be gone, not unioned in.
+        XCTAssertEqual(policy?["granted_permissions"] as? [String], ["input", "policy_modify"])
+    }
+
+    func testRestrictedAgentReceivesPermissionDeniedForSnapshot() async throws {
+        _ = try await server.dispatch(method: "tools/call", params: [
+            "name": "set_policy", "arguments": ["granted_permissions": ["input"]],
+        ])
+        do {
+            _ = try await server.dispatch(method: "tools/call", params: ["name": "snapshot", "arguments": [:]])
+            XCTFail("Expected permissionDenied for snapshot without capture permission")
+        } catch let error as AutomationError {
+            if case .permissionDenied(let message) = error {
+                XCTAssertTrue(message.contains("capture"), "Expected message naming 'capture', got: \(message)")
+            } else {
+                XCTFail("Expected permissionDenied, got \(error)")
+            }
+        }
+    }
+
+    func testSetPolicyRequiresPolicyModifyPermission() async throws {
+        _ = try await server.dispatch(method: "tools/call", params: [
+            "name": "set_policy", "arguments": ["granted_permissions": ["capture"]],
+        ])
+        do {
+            _ = try await server.dispatch(method: "tools/call", params: [
+                "name": "set_policy", "arguments": ["allow_keywords": ["save"]],
+            ])
+            XCTFail("Expected permissionDenied for set_policy without policy_modify permission")
+        } catch let error as AutomationError {
+            if case .permissionDenied(let message) = error {
+                XCTAssertTrue(message.contains("policy_modify"), "Expected message naming 'policy_modify', got: \(message)")
+            } else {
+                XCTFail("Expected permissionDenied, got \(error)")
+            }
+        }
+        // The refused mutation must not have changed the policy.
+        let getResult = try await server.dispatch(method: "tools/call", params: ["name": "get_policy", "arguments": [:]])
+        let policy = getResult["structuredContent"] as? [String: Any]
+        XCTAssertEqual(policy?["granted_permissions"] as? [String], ["capture"])
+        XCTAssertEqual(policy?["allowedKeywords"] as? [String], [], "Refused allow_keywords must not be applied")
+    }
+
+    func testPermissionDeniedRefusalPayloadCarriesStableCode() {
+        let message = "Permission denied: the 'capture' permission is required for snapshot."
+        let payload = MCPServer.refusalPayload(
+            code: AutomationError.permissionDenied(message).code,
+            message: message
+        )
+        XCTAssertEqual(payload["isError"] as? Bool, false)
+        let structured = payload["structuredContent"] as? [String: Any]
+        XCTAssertEqual(structured?["status"] as? String, "refused")
+        let refusal = structured?["refusal"] as? [String: Any]
+        XCTAssertEqual(refusal?["code"] as? String, "destructive_control_refused")
+        XCTAssertEqual(refusal?["message"] as? String, message)
+    }
+}
