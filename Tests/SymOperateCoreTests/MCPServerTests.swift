@@ -306,6 +306,45 @@ extension MCPServerTests {
         // The production guard is 50 MB; the injected limit above only shrinks it.
         XCTAssertEqual(MCPStreamBuffer.maxMessageSize, 50 * 1024 * 1024)
     }
+
+    func testReadMessageRejectsInvalidContentLength() throws {
+        var buffer = MCPStreamBuffer()
+        let handle = makeReadHandle(Data("Content-Length: nope\r\n\r\n".utf8))
+        defer { try? handle.close() }
+
+        XCTAssertThrowsError(try buffer.readMessage(from: handle)) { error in
+            guard case AutomationError.operationFailed(let message) = error else {
+                return XCTFail("Expected operationFailed, got \(error)")
+            }
+            XCTAssertEqual(message, "Invalid Content-Length header.")
+        }
+    }
+
+    func testReadMessageRejectsOversizedContentLength() throws {
+        var buffer = MCPStreamBuffer(maxLineSize: 1024)
+        let handle = makeReadHandle(Data("Content-Length: 2048\r\n\r\n".utf8))
+        defer { try? handle.close() }
+
+        XCTAssertThrowsError(try buffer.readMessage(from: handle)) { error in
+            guard case AutomationError.operationFailed(let message) = error else {
+                return XCTFail("Expected operationFailed, got \(error)")
+            }
+            XCTAssertTrue(message.contains("2048"), "Expected rejected payload size in: \(message)")
+        }
+    }
+
+    func testReadMessageRejectsTruncatedContentLengthPayload() throws {
+        var buffer = MCPStreamBuffer()
+        let handle = makeReadHandle(Data("Content-Length: 5\r\n\r\nabc".utf8))
+        defer { try? handle.close() }
+
+        XCTAssertThrowsError(try buffer.readMessage(from: handle)) { error in
+            guard case AutomationError.operationFailed(let message) = error else {
+                return XCTFail("Expected operationFailed, got \(error)")
+            }
+            XCTAssertEqual(message, "Unexpected end of input while reading MCP payload.")
+        }
+    }
 }
 
 extension MCPServerTests {
