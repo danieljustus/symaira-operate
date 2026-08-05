@@ -21,7 +21,7 @@ Part of the [Symaira](../ECOSYSTEM.md) family, and the agent-native sibling of
 tune = thermals/brightness/power.**
 
 > **Status: v0.4.0.** Working native implementation (rebranded from the author's
-> `mac-operator` prototype), 127 tests passing.
+> `mac-operator` prototype), 131 tests passing.
 
 ## Why symoperate?
 
@@ -77,6 +77,9 @@ symoperate serve                          Run the MCP server over stdio
 symoperate doctor                         Permission status + environment probes (JSON)
 symoperate version                        Print version and check for updates (JSON)
 symoperate history --json                 Print the local operation history (JSON)
+symoperate updates check [--force]        Check for updates and print result (JSON)
+symoperate updates skip [<version>]       Show skipped version, or skip a specific version
+symoperate updates clear-skip             Clear the skipped version
 symoperate permissions status             Current macOS permissions
 symoperate permissions grant accessibility
 symoperate permissions grant screen

@@ -5,6 +5,17 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0]
+
+### Changed
+- Version constant aligned with the v0.4.0 tag (was still 0.2.4).
+
+### Fixed
+- CI coverage pipeline: robust profraw discovery and artifact handling.
+
+### Dependencies
+- Bump github.com/danieljustus/symaira-appkit to 0.6.1 (#74), actions/upload-artifact to v7 (#73), actions/download-artifact to v8 (#72).
+
 ## [0.2.4]
 
 ### Fixed
