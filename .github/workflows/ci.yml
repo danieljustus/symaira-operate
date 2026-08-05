@@ -35,7 +35,6 @@ jobs:
 
   coverage:
     runs-on: macos-15
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v7
       - name: Swift version
