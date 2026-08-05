@@ -1,7 +1,6 @@
 import XCTest
 @testable import SymOperateCore
 
-
 // MARK: - Tests
 
 final class SafetyPolicyTests: XCTestCase {
