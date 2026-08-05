@@ -12,7 +12,7 @@ test:
 	swift test
 
 coverage:
-	swift test --enable-code-coverage || true
+	swift test --enable-code-coverage
 	@rm -f .build/coverage.profdata .build/coverage.json
 	@find .build -type d -name codecov -exec find {} -name '*.profraw' -print0 \; 2>/dev/null | xargs -0 xcrun llvm-profdata merge -sparse -o .build/coverage.profdata 2>/dev/null; \
 	if [ -f .build/coverage.profdata ]; then \
