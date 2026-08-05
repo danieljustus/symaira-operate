@@ -440,7 +440,6 @@ extension MCPServer {
     }
 }
 
-
 private extension MCPServer {
     func string(_ value: Any?) -> String? { value as? String }
 
