@@ -203,3 +203,107 @@ final class MCPServerTests: XCTestCase {
         XCTAssertTrue(description.contains("optional"), "snapshot description should note both parameters are optional")
     }
 }
+extension MCPServerTests {
+    // MARK: - Buffered stdin transport tests (Issue #86)
+
+    /// Writes `data` into a pipe and returns the read end (EOF after the data).
+    private func makeReadHandle(_ data: Data) -> FileHandle {
+        let pipe = Pipe()
+        pipe.fileHandleForWriting.write(data)
+        pipe.fileHandleForWriting.closeFile()
+        return pipe.fileHandleForReading
+    }
+
+    /// A stream of several newline-delimited messages must be parsed one line
+    /// per message, with the remainder of each buffered chunk carried over.
+    func testReadMessageParsesMultipleNewlineDelimitedMessages() throws {
+        var buffer = MCPStreamBuffer()
+        let handle = makeReadHandle(Data("""
+        {"jsonrpc":"2.0","id":1,"method":"ping"}
+        {"jsonrpc":"2.0","id":2,"method":"ping"}
+        {"jsonrpc":"2.0","id":3,"method":"ping"}
+        """.utf8))
+        defer { try? handle.close() }
+
+        XCTAssertEqual(
+            try buffer.readMessage(from: handle),
+            Data("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}".utf8)
+        )
+        XCTAssertEqual(
+            try buffer.readMessage(from: handle),
+            Data("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}".utf8)
+        )
+        XCTAssertEqual(
+            try buffer.readMessage(from: handle),
+            Data("{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"ping\"}".utf8)
+        )
+        XCTAssertNil(try buffer.readMessage(from: handle))
+    }
+
+    /// A message larger than one 4096-byte read chunk must be assembled from
+    /// multiple chunks, and the next message must start exactly after it.
+    func testReadMessageLargerThanReadChunkCarriesOverRemainder() throws {
+        var buffer = MCPStreamBuffer()
+        let bigPayload = String(repeating: "x", count: MCPStreamBuffer.readChunkSize * 3)
+        let big = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"params\":{\"text\":\"\(bigPayload)\"}}"
+        let small = "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+        let handle = makeReadHandle(Data((big + "\n" + small + "\n").utf8))
+        defer { try? handle.close() }
+
+        XCTAssertGreaterThan(big.utf8.count, MCPStreamBuffer.readChunkSize)
+        XCTAssertEqual(try buffer.readMessage(from: handle), Data(big.utf8))
+        XCTAssertEqual(try buffer.readMessage(from: handle), Data(small.utf8))
+        XCTAssertNil(try buffer.readMessage(from: handle))
+    }
+
+    /// A final line without a trailing newline must still be delivered, and a
+    /// subsequent read at EOF (with an empty buffer) must return nil.
+    func testReadMessageDeliversFinalLineWithoutTrailingNewline() throws {
+        var buffer = MCPStreamBuffer()
+        let line = "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"ping\"}"
+        let handle = makeReadHandle(Data(line.utf8))
+        defer { try? handle.close() }
+
+        XCTAssertEqual(try buffer.readMessage(from: handle), Data(line.utf8))
+        XCTAssertNil(try buffer.readMessage(from: handle))
+    }
+
+    /// Legacy LSP Content-Length framing (header + blank line + body) must
+    /// still work through the shared buffer, including a following
+    /// newline-delimited message that starts in the same buffered chunk.
+    func testReadMessageContentLengthFraming() throws {
+        var buffer = MCPStreamBuffer()
+        let body = "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"ping\"}"
+        let header = "Content-Length: \(body.utf8.count)\r\n\r\n"
+        let next = "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"ping\"}\n"
+        let handle = makeReadHandle(Data((header + body + next).utf8))
+        defer { try? handle.close() }
+
+        XCTAssertEqual(try buffer.readMessage(from: handle), Data(body.utf8))
+        XCTAssertEqual(
+            try buffer.readMessage(from: handle),
+            Data("{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"ping\"}".utf8)
+        )
+        XCTAssertNil(try buffer.readMessage(from: handle))
+    }
+
+    /// The 50 MB size guard must still reject an oversized NDJSON line.
+    func testReadMessageRejectsOversizedNewlineDelimitedLine() throws {
+        var buffer = MCPStreamBuffer(maxLineSize: 1024)
+        let oversized = String(repeating: "a", count: 2048)
+        let handle = makeReadHandle(Data((oversized + "\n").utf8))
+        defer { try? handle.close() }
+
+        XCTAssertThrowsError(try buffer.readMessage(from: handle)) { error in
+            guard case AutomationError.operationFailed(let message) = error else {
+                return XCTFail("Expected operationFailed, got \(error)")
+            }
+            XCTAssertTrue(
+                message.contains("exceeds maximum allowed size"),
+                "Guard message missing size hint: \(message)"
+            )
+        }
+        // The production guard is 50 MB; the injected limit above only shrinks it.
+        XCTAssertEqual(MCPStreamBuffer.maxMessageSize, 50 * 1024 * 1024)
+    }
+}
