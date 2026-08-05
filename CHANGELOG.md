@@ -5,6 +5,20 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0]
+
+### Added
+- Bounded `history.jsonl` growth with hardened file permissions (#87, #90).
+- Tests for invalid, oversized and truncated MCP `Content-Length` frames.
+
+### Changed
+- MCP stdin reads are buffered instead of byte-by-byte (#93).
+- CI coverage pipeline fails fast on test failures (#92).
+
+### Fixed
+- TCC screen-capture denial is classified as `permissionDenied` (#84, #89).
+- `PermissionFlags.grantedPermissions` is enforced across all action paths (#91).
+
 ## [0.4.0]
 
 ### Changed
