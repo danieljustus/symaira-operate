@@ -62,6 +62,7 @@ public final class AutomationController {
     }
 
     public func snapshot(displayID: UInt32? = nil, windowID: Int? = nil) throws -> Snapshot {
+        try requirePermission(.capture, for: "snapshot")
         if let windowID {
             return try screen.captureWindow(windowID: windowID)
         }
@@ -120,6 +121,7 @@ public final class AutomationController {
         displayID: UInt32? = nil,
         windowID: Int? = nil
     ) throws -> UIQueryResult {
+        try requirePermission(.capture, for: "find_ui")
         let queryResult: UIQueryResult
         if let snapshotID, accessibility.hasCachedNodes(for: snapshotID),
            let cachedNodes = accessibility.cachedNodes(for: snapshotID),
@@ -158,6 +160,7 @@ public final class AutomationController {
         button: String = "left",
         doubleClick: Bool = false
     ) throws -> ActionResult {
+        try requirePermission(.input, for: "click")
         var targets: [String: String] = ["button": button, "doubleClick": String(doubleClick)]
         if let snapshotID { targets["snapshotID"] = snapshotID }
         if let elementID { targets["elementID"] = elementID }
@@ -172,6 +175,7 @@ public final class AutomationController {
     }
 
     public func typeText(_ text: String) throws -> ActionResult {
+        try requirePermission(.input, for: "type_text")
         let redacted = "<redacted: \(text.count) chars>"
         return try executeAction(name: "type_text", targets: ["text": redacted]) {
             guard !text.isEmpty else {
@@ -184,6 +188,7 @@ public final class AutomationController {
     }
 
     public func pressKeys(_ keys: [String]) throws -> ActionResult {
+        try requirePermission(.input, for: "press_keys")
         return try executeAction(name: "press_keys", targets: ["keys": keys.joined(separator: "+")]) {
             try guardAgainstSecureField()
             try input.pressKeys(keys)
@@ -192,6 +197,7 @@ public final class AutomationController {
     }
 
     public func scroll(deltaX: Double = 0, deltaY: Double) throws -> ActionResult {
+        try requirePermission(.input, for: "scroll")
         return try executeAction(name: "scroll", targets: ["deltaX": String(deltaX), "deltaY": String(deltaY)]) {
             try input.scroll(deltaX: deltaX, deltaY: deltaY)
             return "Scroll event posted with delta (\(deltaX), \(deltaY))."
@@ -207,6 +213,7 @@ public final class AutomationController {
         toX: Double? = nil,
         toY: Double? = nil
     ) throws -> ActionResult {
+        try requirePermission(.input, for: "drag")
         var targets: [String: String] = [:]
         if let snapshotID { targets["snapshotID"] = snapshotID }
         if let fromElementID { targets["fromElementID"] = fromElementID }
@@ -225,6 +232,7 @@ public final class AutomationController {
     }
 
     public func launchApp(bundleID: String? = nil, appName: String? = nil) throws -> ActionResult {
+        try requirePermission(.appControl, for: "launch_app")
         var targets: [String: String] = [:]
         if let bundleID { targets["bundleID"] = bundleID }
         if let appName { targets["appName"] = appName }
@@ -236,6 +244,7 @@ public final class AutomationController {
     }
 
     public func focusWindow(bundleID: String? = nil, appName: String? = nil, title: String? = nil) throws -> ActionResult {
+        try requirePermission(.appControl, for: "focus_window")
         var targets: [String: String] = [:]
         if let bundleID { targets["bundleID"] = bundleID }
         if let appName { targets["appName"] = appName }
@@ -248,6 +257,7 @@ public final class AutomationController {
     }
 
     public func menuAction(path: [String]) throws -> ActionResult {
+        try requirePermission(.menuAction, for: "menu_action")
         return try executeAction(name: "menu_action", targets: ["path": path.joined(separator: " > ")]) {
             try accessibility.performMenuAction(path: path)
             return "Menu action posted: \(path.joined(separator: " > "))."
@@ -290,6 +300,19 @@ public final class AutomationController {
     private func guardAgainstSecureField() throws {
         if let role = accessibility.frontmostFocusedElementRole(), role == "AXSecureTextField" {
             throw AutomationError.permissionDenied("Refusing to type into a secure text field.")
+        }
+    }
+
+    /// Throws a classified `.permissionDenied` refusal when `required` is not
+    /// present in `actionPolicy.grantedPermissions`. The destructive-keyword
+    /// guard inside `firstViolation` always takes precedence and is unchanged;
+    /// this gate is ADDITIONAL to it.
+    private func requirePermission(_ required: PermissionFlags, for action: String) throws {
+        if let violation = actionPolicy.firstViolation(requiredPermission: required) {
+            let names = violation.flagNames.joined(separator: ", ")
+            throw AutomationError.permissionDenied(
+                "Permission denied: the '\(names)' permission is required for \(action)."
+            )
         }
     }
 

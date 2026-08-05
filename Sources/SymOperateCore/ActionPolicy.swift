@@ -57,7 +57,7 @@ public struct ActionPolicy: Codable, Sendable {
     /// Evaluates keyword-based deny/allow rules first (backward-compatible),
     /// then checks the granted permissions for the relevant operation category.
     public func firstViolation(
-        role: String?, title: String?, label: String?, value: String?,
+        role: String? = nil, title: String? = nil, label: String? = nil, value: String? = nil,
         bundleID: String? = nil, requiredPermission: PermissionFlags? = nil
     ) -> PermissionFlags? {
         // Bundle allowlist bypasses everything.
@@ -103,5 +103,48 @@ public struct ActionPolicy: Codable, Sendable {
 
     public mutating func allowBundleID(_ bundleID: String) {
         allowedBundleIDs.insert(bundleID)
+    }
+}
+
+// MARK: - Flag name mapping
+
+extension PermissionFlags {
+    /// Canonical human-readable names of all defined flags, in bit order.
+    public static let allFlagNames: [String] = [
+        "capture", "input", "app_control", "menu_action",
+        "destructive_action", "secure_field_access", "policy_modify",
+    ]
+
+    /// Returns the flag for a human-readable name, or `nil` for unknown names.
+    public static func flag(named name: String) -> PermissionFlags? {
+        switch name.lowercased() {
+        case "capture": return .capture
+        case "input": return .input
+        case "app_control": return .appControl
+        case "menu_action": return .menuAction
+        case "destructive_action": return .destructiveAction
+        case "secure_field_access": return .secureFieldAccess
+        case "policy_modify": return .policyModify
+        default: return nil
+        }
+    }
+
+    /// Parses an array of flag names into a set. Unknown names are ignored.
+    public static func parse(names: [String]) -> PermissionFlags {
+        var result = PermissionFlags()
+        for name in names {
+            if let flag = flag(named: name) {
+                result.insert(flag)
+            }
+        }
+        return result
+    }
+
+    /// Human-readable names of the flags present in this set, in canonical order.
+    public var flagNames: [String] {
+        Self.allFlagNames.filter { name in
+            guard let flag = Self.flag(named: name) else { return false }
+            return contains(flag)
+        }
     }
 }

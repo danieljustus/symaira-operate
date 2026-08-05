@@ -1,142 +1,6 @@
 import XCTest
 @testable import SymOperateCore
 
-// MARK: - Mock Services
-
-private final class MockAccessibilityService: AccessibilityServiceProtocol {
-    private var elements: [String: [String: AccessibilityService.ResolvedElement]] = [:]
-    private var nodesCache: [String: [UINode]] = [:]
-    private var snapshotCache: [String: Snapshot] = [:]
-    var focusedRoleOverride: String?
-
-    func prepopulate(snapshotID: String, elementID: String, role: String?, title: String?, label: String?, value: String?, frame: RectValue?) {
-        let element = AXUIElementCreateApplication(0)
-        let resolved = AccessibilityService.ResolvedElement(element: element, frame: frame, role: role, title: title, label: label, value: value)
-        elements[snapshotID, default: [:]][elementID] = resolved
-    }
-
-    func prepopulateMany(snapshotID: String, elements: [String: AccessibilityService.ResolvedElement]) {
-        for (elementID, resolved) in elements {
-            self.elements[snapshotID, default: [:]][elementID] = resolved
-        }
-    }
-
-    func queryFrontmostUI(snapshotID: String, maxDepth: Int, maxNodes: Int) throws -> [UINode] { [] }
-
-    func resolveElement(snapshotID: String, elementID: String) -> AccessibilityService.ResolvedElement? {
-        elements[snapshotID]?[elementID]
-    }
-
-    func resolveElementAtPoint(x: Double, y: Double) -> AccessibilityService.ResolvedElement? {
-        var bestMatch: AccessibilityService.ResolvedElement?
-        var bestArea: Double = .greatestFiniteMagnitude
-
-        for snapshotCache in elements.values {
-            for element in snapshotCache.values {
-                guard let frame = element.frame else { continue }
-                let minX = frame.x
-                let maxX = frame.x + frame.width
-                let minY = frame.y
-                let maxY = frame.y + frame.height
-                if x >= minX, x <= maxX, y >= minY, y <= maxY {
-                    let area = frame.width * frame.height
-                    if area < bestArea {
-                        bestArea = area
-                        bestMatch = element
-                    }
-                }
-            }
-        }
-        return bestMatch
-    }
-
-    func hasCachedNodes(for snapshotID: String) -> Bool {
-        nodesCache[snapshotID] != nil
-    }
-
-    func cachedNodes(for snapshotID: String) -> [UINode]? {
-        nodesCache[snapshotID]
-    }
-
-    func cachedSnapshot(for snapshotID: String) -> Snapshot? {
-        snapshotCache[snapshotID]
-    }
-
-    func storeSnapshot(_ snapshot: Snapshot, for snapshotID: String) {
-        snapshotCache[snapshotID] = snapshot
-    }
-
-    func storeNodes(_ nodes: [UINode], for snapshotID: String) {
-        nodesCache[snapshotID] = nodes
-    }
-
-    func frontmostFocusedElementRole() -> String? { focusedRoleOverride }
-
-    func frontmostContainsText(_ text: String) -> Bool { false }
-
-    func performMenuAction(path: [String]) throws {}
-}
-
-private final class MockScreenService: ScreenServiceProtocol {
-    var stubbedSnapshot: Snapshot?
-    var captureMainDisplayCalled = false
-
-    func listDisplays() -> [DisplayInfo] { [] }
-    func captureMainDisplay(maxDimension: CoreGraphics.CGFloat) throws -> Snapshot {
-        captureMainDisplayCalled = true
-        if let snapshot = stubbedSnapshot {
-            return snapshot
-        }
-        throw AutomationError.unavailable("mock")
-    }
-    func captureDisplay(displayID: UInt32, maxDimension: CoreGraphics.CGFloat) throws -> Snapshot { throw AutomationError.unavailable("mock") }
-    func captureWindow(windowID: Int, maxDimension: CoreGraphics.CGFloat) throws -> Snapshot { throw AutomationError.unavailable("mock") }
-}
-
-private final class MockInputService: InputServiceProtocol {
-    func click(at point: PointValue, button: String, doubleClick: Bool) throws {}
-    func typeText(_ text: String) throws {}
-    func pressKeys(_ keys: [String]) throws {}
-    func scroll(deltaX: Double, deltaY: Double) throws {}
-    func drag(from start: PointValue, to end: PointValue, steps: Int) throws {}
-}
-
-private final class MockAppService: AppServiceProtocol {
-    func listApps() -> [AppInfo] { [] }
-    func listWindows() -> [WindowInfo] { [] }
-    func frontmostApp() -> AppInfo? { nil }
-    func launchApp(bundleID: String?, appName: String?) throws {}
-    func focusWindow(bundleID: String?, appName: String?, title: String?) throws {}
-}
-
-private final class MockOCRService: OCRServiceProtocol {
-    func recognizeText(in image: CoreGraphics.CGImage) -> OCRResult { OCRResult(regions: [], fullText: "") }
-    func isAXTreeWeak(nodeCount: Int, threshold: Int) -> Bool { nodeCount <= threshold }
-}
-
-private final class MockUIQueryService: UIQueryServiceProtocol {
-    var stubbedNodes: [UINode]?
-
-    func findNodes(in nodes: [UINode], predicate: UIElementPredicate) -> [UINode] {
-        if let stubbed = stubbedNodes {
-            return stubbed
-        }
-        return nodes.filter { predicate.matches(node: $0) }
-    }
-}
-
-private let testPermissionSource = PermissionSource(
-    pid: 1, ppid: 0, executablePath: "/usr/local/bin/symoperate",
-    launchingProcessName: "test",
-    note: "Mock source for test."
-)
-
-private final class MockPermissionService: PermissionServiceProtocol {
-    func status() -> PermissionSnapshot { PermissionSnapshot(accessibilityGranted: true, screenRecordingGranted: true, source: testPermissionSource) }
-    func requestAccessibilityPermission() -> Bool { true }
-    func requestScreenRecordingPermission() -> Bool { true }
-}
-
 // MARK: - Tests
 
 final class SafetyPolicyTests: XCTestCase {
@@ -726,5 +590,164 @@ extension SafetyPolicyTests {
                 XCTFail("Expected permissionDenied, got \(error)")
             }
         }
+    }
+}
+
+extension SafetyPolicyTests {
+    // MARK: - Permission Gate Tests (Issue #85)
+
+    private func makePermissionGatedController(granted: PermissionFlags) -> AutomationController {
+        AutomationController(
+            permissions: MockPermissionService(),
+            screen: MockScreenService(),
+            apps: MockAppService(),
+            accessibility: MockAccessibilityService(),
+            input: MockInputService(),
+            ocr: MockOCRService(),
+            queryService: MockUIQueryService(),
+            actionPolicy: ActionPolicy(grantedPermissions: granted)
+        )
+    }
+
+    private func assertPermissionDenied(
+        _ expression: @autoclosure () throws -> Any?,
+        contains expected: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        do {
+            _ = try expression()
+            XCTFail("Expected permissionDenied containing '\(expected)'", file: file, line: line)
+        } catch let error as AutomationError {
+            if case .permissionDenied(let message) = error {
+                XCTAssertTrue(
+                    message.contains(expected),
+                    "Expected message containing '\(expected)', got: \(message)",
+                    file: file, line: line
+                )
+            } else {
+                XCTFail("Expected permissionDenied, got \(error)", file: file, line: line)
+            }
+        } catch {
+            XCTFail("Expected AutomationError, got \(error)", file: file, line: line)
+        }
+    }
+
+    // MARK: capture
+
+    func testSnapshotRequiresCapturePermission() throws {
+        let restricted = makePermissionGatedController(granted: [.input])
+        assertPermissionDenied(try restricted.snapshot(), contains: "capture")
+    }
+
+    func testQueryUIRequiresCapturePermission() throws {
+        let restricted = makePermissionGatedController(granted: [.input])
+        assertPermissionDenied(try restricted.queryUI(), contains: "capture")
+    }
+
+    func testFindUIRequiresCapturePermission() throws {
+        let restricted = makePermissionGatedController(granted: [.input])
+        assertPermissionDenied(
+            try restricted.findUI(predicate: UIElementPredicate(title: "Save")),
+            contains: "capture"
+        )
+    }
+
+    // MARK: input
+
+    func testClickRequiresInputPermission() throws {
+        let restricted = makePermissionGatedController(granted: [.capture])
+        assertPermissionDenied(try restricted.click(x: 10, y: 10), contains: "input")
+    }
+
+    func testTypeTextRequiresInputPermission() throws {
+        let restricted = makePermissionGatedController(granted: [.capture])
+        assertPermissionDenied(try restricted.typeText("hello"), contains: "input")
+    }
+
+    func testPressKeysRequiresInputPermission() throws {
+        let restricted = makePermissionGatedController(granted: [.capture])
+        assertPermissionDenied(try restricted.pressKeys(["a"]), contains: "input")
+    }
+
+    func testScrollRequiresInputPermission() throws {
+        let restricted = makePermissionGatedController(granted: [.capture])
+        assertPermissionDenied(try restricted.scroll(deltaY: 10), contains: "input")
+    }
+
+    func testDragRequiresInputPermission() throws {
+        let restricted = makePermissionGatedController(granted: [.capture])
+        assertPermissionDenied(try restricted.drag(fromX: 0, fromY: 0, toX: 10, toY: 10), contains: "input")
+    }
+
+    // MARK: appControl
+
+    func testLaunchAppRequiresAppControlPermission() throws {
+        let restricted = makePermissionGatedController(granted: [.capture])
+        assertPermissionDenied(try restricted.launchApp(bundleID: "com.apple.TextEdit"), contains: "app_control")
+    }
+
+    func testFocusWindowRequiresAppControlPermission() throws {
+        let restricted = makePermissionGatedController(granted: [.capture])
+        assertPermissionDenied(try restricted.focusWindow(appName: "TextEdit"), contains: "app_control")
+    }
+
+    // MARK: menuAction
+
+    func testMenuActionRequiresMenuActionPermission() throws {
+        let restricted = makePermissionGatedController(granted: [.capture])
+        assertPermissionDenied(try restricted.menuAction(path: ["File", "Save"]), contains: "menu_action")
+    }
+
+    // MARK: default .all behavior (no regression)
+
+    func testDefaultPolicyAllStillPermitsActions() throws {
+        // The default ActionPolicy() grants .all — the permission gate must not fire.
+        let launched = try controller.launchApp(bundleID: "com.apple.TextEdit")
+        XCTAssertTrue(launched.ok)
+        let typed = try controller.typeText("hello")
+        XCTAssertTrue(typed.ok)
+        let menu = try controller.menuAction(path: ["File", "Save"])
+        XCTAssertTrue(menu.ok)
+
+        // snapshot reaches the mock screen service (which reports unavailable),
+        // NOT the permission gate.
+        do {
+            _ = try controller.snapshot()
+            XCTFail("Expected the mock screen service to report unavailable")
+        } catch let error as AutomationError {
+            if case .permissionDenied = error {
+                XCTFail("Default .all policy must not refuse snapshot, got: \(error)")
+            }
+        }
+    }
+
+    func testDestructiveGuardStillFiresWithAllPermissions() throws {
+        // Explicit .all: the destructive-keyword guard must still refuse (no regression).
+        let ax = MockAccessibilityService()
+        let allAccess = AutomationController(
+            permissions: MockPermissionService(),
+            screen: MockScreenService(),
+            apps: MockAppService(),
+            accessibility: ax,
+            input: MockInputService(),
+            ocr: MockOCRService(),
+            queryService: MockUIQueryService(),
+            actionPolicy: ActionPolicy(grantedPermissions: .all)
+        )
+        let frame = RectValue(x: 100, y: 100, width: 50, height: 30)
+        ax.prepopulate(
+            snapshotID: "snap-delete-all",
+            elementID: "delete-btn",
+            role: "AXButton",
+            title: "Delete",
+            label: nil,
+            value: nil,
+            frame: frame
+        )
+        assertPermissionDenied(
+            try allAccess.click(snapshotID: "snap-delete-all", elementID: "delete-btn"),
+            contains: "destructive"
+        )
     }
 }
