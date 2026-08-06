@@ -1,53 +1,51 @@
 import Foundation
 import SymOperateCore
+import SymairaMCP
 
-public final class MCPServer {
+/// MCP server for `symoperate`, built on appkit's `SymairaMCP` module.
+///
+/// The JSON-RPC 2.0 loop (parse → validate → dispatch → respond), the
+/// method-handler registry, and the stdio transport are provided by
+/// `SymairaMCP.MCPServer` + `MCPStdioTransport` — the shared implementation
+/// that replaced this package's hand-rolled server (see `symaira-appkit`
+/// issue #55, migration issue #97). This type owns only the symoperate-
+/// specific parts:
+///
+/// - the tool registry (`tools()`) and the `tools/call` implementations,
+///   which drive `AutomationController`;
+/// - the safety-refusal payload shape (`refusalPayload`): classified
+///   `.permissionDenied` outcomes are returned as successful `tools/call`
+///   results with a stable `structuredContent.refusal.code`, never as
+///   JSON-RPC errors;
+/// - the in-process `dispatch(method:params:)` seam used by unit tests and
+///   embedders, which shares the exact same tool implementations as the
+///   wire handlers.
+///
+/// The wire payload shapes are intentionally byte-compatible with the
+/// previous implementation (same `tools/list` schemas including `oneOf` /
+/// `anyOf` / `enum` constraints, same `structuredContent` extension key on
+/// `tools/call` results). `SymairaMCP`'s generic `MCPJSONValue` result type
+/// makes this possible without constraining the tool metadata to the
+/// module's minimal `MCPTool` schema shape.
+public final class MCPServer: @unchecked Sendable {
     private let controller: AutomationController
-    private let decoder = JSONDecoder()
-    private let encoder = JSONEncoder()
-
-    /// Buffered stdin reader shared across all message reads so that bytes
-    /// read ahead of the current frame (chunked 4096-byte reads) are carried
-    /// over instead of being lost or re-read byte-by-byte.
-    private var stream = MCPStreamBuffer()
+    private let server: SymairaMCP.MCPServer
 
     public init(controller: AutomationController = AutomationController()) {
         self.controller = controller
-        encoder.outputFormatting = [.sortedKeys]
+        self.server = SymairaMCP.MCPServer(name: "symoperate", version: SymOperateVersion.current)
+        registerHandlers()
     }
 
-    public func run() async throws {
-        let stdin = FileHandle.standardInput
-        while let message = try stream.readMessage(from: stdin) {
-            guard
-                let object = try JSONSerialization.jsonObject(with: message) as? [String: Any],
-                let method = object["method"] as? String
-            else {
-                continue
-            }
-
-            let id = object["id"]
-            let params = object["params"] as? [String: Any] ?? [:]
-
-            do {
-                let result = try await dispatch(method: method, params: params)
-                try sendResponse(id: id, result: result)
-            } catch let error as AutomationError {
-                if case .permissionDenied = error {
-                    // Deliberate safety refusals are NOT JSON-RPC errors — the call
-                    // executed correctly and the outcome is the refusal.
-                    try sendRefusal(id: id, code: error.code, message: error.localizedDescription)
-                } else {
-                    // Genuine faults carry the code in error.data for machine-readable
-                    // classification on the error path.
-                    try sendError(id: id, code: -32000, message: error.localizedDescription, data: ["code": error.code])
-                }
-            } catch {
-                try sendError(id: id, code: -32000, message: error.localizedDescription)
-            }
-        }
+    /// Serves MCP over stdio until stdin closes.
+    public func run(transport: any MCPTransport = MCPStdioTransport()) async throws {
+        try await server.start(transport: transport)
     }
 
+    /// In-process dispatch, sharing the same tool implementations as the
+    /// wire handlers. Returns the JSON-RPC result object, or throws
+    /// `AutomationError` — the error-to-wire mapping (JSON-RPC errors vs.
+    /// refusal results) happens in the wire handlers.
     public func dispatch(method: String, params: [String: Any]) async throws -> [String: Any] {
         switch method {
         case "initialize":
@@ -59,10 +57,45 @@ public final class MCPServer {
         case "tools/list":
             return ["tools": tools()]
         case "tools/call":
-            return try await callTool(params: params)
+            guard let name = params["name"] as? String else {
+                throw AutomationError.invalidArgument("tools/call requires a tool name.")
+            }
+            let arguments = params["arguments"] as? [String: Any] ?? [:]
+            return try await callTool(name: name, arguments: arguments)
         default:
             throw AutomationError.invalidArgument("Method not found: \(method)")
         }
+    }
+
+    /// Registers the symoperate methods on appkit's server. `initialize` is
+    /// deliberately overridden to preserve the previous echo semantics:
+    /// the server answers with the client's requested protocol version (or
+    /// the legacy default) instead of always advertising its own.
+    private func registerHandlers() {
+        server
+            .withMethodHandler("initialize") { [self] (params: MCPInitializeParams) async throws -> MCPJSONValue in
+                Self.jsonValue(initializeResult(requestedProtocol: params.protocolVersion))
+            }
+            .withMethodHandler("tools/list") { [self] (_: MCPNoParams) async throws -> MCPJSONValue in
+                .object(["tools": .array(tools().map(Self.jsonValue))])
+            }
+            .withMethodHandler("tools/call") { [self] (params: MCPCallToolParams) async throws -> MCPJSONValue in
+                let arguments = (params.arguments ?? [:]).mapValues(Self.jsonAny)
+                do {
+                    return Self.jsonValue(try await callTool(name: params.name, arguments: arguments))
+                } catch let error as AutomationError {
+                    if case .permissionDenied = error {
+                        // Deliberate safety refusals are NOT JSON-RPC errors —
+                        // the call executed correctly and the outcome is the
+                        // refusal.
+                        return Self.jsonValue(Self.refusalPayload(code: error.code, message: error.localizedDescription))
+                    }
+                    // Genuine faults surface as JSON-RPC internal errors.
+                    throw MCPError(error.localizedDescription)
+                } catch {
+                    throw MCPError(error.localizedDescription)
+                }
+            }
     }
 
     private func initializeResult(requestedProtocol: String?) -> [String: Any] {
@@ -238,12 +271,10 @@ public final class MCPServer {
         ])
     }
 
-    private func callTool(params: [String: Any]) async throws -> [String: Any] {
-        guard let name = params["name"] as? String else {
-            throw AutomationError.invalidArgument("tools/call requires a tool name.")
-        }
-        let arguments = params["arguments"] as? [String: Any] ?? [:]
-
+    /// Executes one tool and builds the `tools/call` result payload:
+    /// `content` (human-readable JSON summary), `structuredContent`
+    /// (machine-readable payload), and `isError: false`.
+    private func callTool(name: String, arguments: [String: Any]) async throws -> [String: Any] {
         let payload: Encodable
         switch name {
         case "snapshot":
@@ -414,28 +445,6 @@ public final class MCPServer {
         }
         return text
     }
-}
-
-// MARK: - Send helpers
-
-extension MCPServer {
-    private func sendResponse(id: Any?, result: [String: Any]) throws {
-        var message: [String: Any] = [
-            "jsonrpc": "2.0",
-            "result": result,
-        ]
-        if let id { message["id"] = id }
-        try send(message)
-    }
-
-    private func sendRefusal(id: Any?, code: String, message: String) throws {
-        var payload: [String: Any] = [
-            "jsonrpc": "2.0",
-            "result": Self.refusalPayload(code: code, message: message),
-        ]
-        if let id { payload["id"] = id }
-        try send(payload)
-    }
 
     /// Builds the JSON-RPC result payload for a classified safety refusal.
     /// Refusals are deliberately NOT JSON-RPC errors (`isError: false`) and
@@ -458,29 +467,65 @@ extension MCPServer {
         ]
     }
 
-    private func sendError(id: Any?, code: Int, message: String, data: [String: Any]? = nil) throws {
-        var errorPayload: [String: Any] = [
-            "code": code,
-            "message": message,
-        ]
-        if let data { errorPayload["data"] = data }
-        var payload: [String: Any] = [
-            "jsonrpc": "2.0",
-            "error": errorPayload,
-        ]
-        if let id { payload["id"] = id }
-        try send(payload)
+    // MARK: - MCPJSONValue bridging
+    //
+    // The tool payloads above are built as `[String: Any]` (the shape the
+    // in-process `dispatch` seam returns and the tests assert against).
+    // These two converters bridge that shape to `SymairaMCP`'s
+    // `MCPJSONValue` for the wire handlers without changing any payload
+    // semantics.
+
+    private static func jsonValue(_ value: Any) -> MCPJSONValue {
+        switch value {
+        case let number as NSNumber:
+            // JSONSerialization produces __NSCFBoolean for JSON true/false and
+            // __NSCFNumber for numbers. A plain `as? Bool` cast would also
+            // match numeric 0/1 NSNumbers and corrupt integer payloads
+            // (e.g. displayID 1 → true), so booleans must be discriminated
+            // by their CF type. Swift-native Bool values are never NSNumbers
+            // and are caught by the `as Bool` case below.
+            if CFGetTypeID(number) == CFBooleanGetTypeID() {
+                return .bool(number.boolValue)
+            }
+            return .number(number.doubleValue)
+        case let bool as Bool:
+            return .bool(bool)
+        case let string as String:
+            return .string(string)
+        case let array as [Any]:
+            return .array(array.map(jsonValue))
+        case let object as [String: Any]:
+            return .object(object.mapValues(jsonValue))
+        default:
+            return .null
+        }
     }
 
-    /// Emit a single newline-delimited JSON-RPC frame on stdout.
-    private func send(_ payload: [String: Any]) throws {
-        let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
-        FileHandle.standardOutput.write(data)
-        FileHandle.standardOutput.write(Data([0x0A])) // newline
+    private static func jsonAny(_ value: MCPJSONValue) -> Any {
+        switch value {
+        case .null:
+            return NSNull()
+        case .bool(let bool):
+            return bool
+        case .number(let number):
+            return number
+        case .string(let string):
+            return string
+        case .array(let array):
+            return array.map(jsonAny)
+        case .object(let object):
+            return object.mapValues(jsonAny)
+        }
     }
 }
 
 private extension MCPServer {
+    var encoder: JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return encoder
+    }
+
     func string(_ value: Any?) -> String? { value as? String }
 
     func double(_ value: Any?) -> Double? {

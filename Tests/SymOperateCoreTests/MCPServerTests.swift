@@ -1,9 +1,10 @@
 import XCTest
+import SymairaMCP
 @testable import SymOperateMCP
 @testable import SymOperateCore
 
 final class MCPServerTests: XCTestCase {
-    private var server: MCPServer!
+    private var server: SymOperateMCP.MCPServer!
 
     override func setUp() {
         super.setUp()
@@ -204,152 +205,7 @@ final class MCPServerTests: XCTestCase {
     }
 }
 extension MCPServerTests {
-    // MARK: - Buffered stdin transport tests (Issue #86)
-
-    /// Writes `data` into a pipe and returns the read end (EOF after the data).
-    private func makeReadHandle(_ data: Data) -> FileHandle {
-        let pipe = Pipe()
-        pipe.fileHandleForWriting.write(data)
-        pipe.fileHandleForWriting.closeFile()
-        return pipe.fileHandleForReading
-    }
-
-    /// A stream of several newline-delimited messages must be parsed one line
-    /// per message, with the remainder of each buffered chunk carried over.
-    func testReadMessageParsesMultipleNewlineDelimitedMessages() throws {
-        var buffer = MCPStreamBuffer()
-        let handle = makeReadHandle(Data("""
-        {"jsonrpc":"2.0","id":1,"method":"ping"}
-        {"jsonrpc":"2.0","id":2,"method":"ping"}
-        {"jsonrpc":"2.0","id":3,"method":"ping"}
-        """.utf8))
-        defer { try? handle.close() }
-
-        XCTAssertEqual(
-            try buffer.readMessage(from: handle),
-            Data("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}".utf8)
-        )
-        XCTAssertEqual(
-            try buffer.readMessage(from: handle),
-            Data("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}".utf8)
-        )
-        XCTAssertEqual(
-            try buffer.readMessage(from: handle),
-            Data("{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"ping\"}".utf8)
-        )
-        XCTAssertNil(try buffer.readMessage(from: handle))
-    }
-
-    /// A message larger than one 4096-byte read chunk must be assembled from
-    /// multiple chunks, and the next message must start exactly after it.
-    func testReadMessageLargerThanReadChunkCarriesOverRemainder() throws {
-        var buffer = MCPStreamBuffer()
-        let bigPayload = String(repeating: "x", count: MCPStreamBuffer.readChunkSize * 3)
-        let big = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"params\":{\"text\":\"\(bigPayload)\"}}"
-        let small = "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
-        let handle = makeReadHandle(Data((big + "\n" + small + "\n").utf8))
-        defer { try? handle.close() }
-
-        XCTAssertGreaterThan(big.utf8.count, MCPStreamBuffer.readChunkSize)
-        XCTAssertEqual(try buffer.readMessage(from: handle), Data(big.utf8))
-        XCTAssertEqual(try buffer.readMessage(from: handle), Data(small.utf8))
-        XCTAssertNil(try buffer.readMessage(from: handle))
-    }
-
-    /// A final line without a trailing newline must still be delivered, and a
-    /// subsequent read at EOF (with an empty buffer) must return nil.
-    func testReadMessageDeliversFinalLineWithoutTrailingNewline() throws {
-        var buffer = MCPStreamBuffer()
-        let line = "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"ping\"}"
-        let handle = makeReadHandle(Data(line.utf8))
-        defer { try? handle.close() }
-
-        XCTAssertEqual(try buffer.readMessage(from: handle), Data(line.utf8))
-        XCTAssertNil(try buffer.readMessage(from: handle))
-    }
-
-    /// Legacy LSP Content-Length framing (header + blank line + body) must
-    /// still work through the shared buffer, including a following
-    /// newline-delimited message that starts in the same buffered chunk.
-    func testReadMessageContentLengthFraming() throws {
-        var buffer = MCPStreamBuffer()
-        let body = "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"ping\"}"
-        let header = "Content-Length: \(body.utf8.count)\r\n\r\n"
-        let next = "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"ping\"}\n"
-        let handle = makeReadHandle(Data((header + body + next).utf8))
-        defer { try? handle.close() }
-
-        XCTAssertEqual(try buffer.readMessage(from: handle), Data(body.utf8))
-        XCTAssertEqual(
-            try buffer.readMessage(from: handle),
-            Data("{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"ping\"}".utf8)
-        )
-        XCTAssertNil(try buffer.readMessage(from: handle))
-    }
-
-    /// The 50 MB size guard must still reject an oversized NDJSON line.
-    func testReadMessageRejectsOversizedNewlineDelimitedLine() throws {
-        var buffer = MCPStreamBuffer(maxLineSize: 1024)
-        let oversized = String(repeating: "a", count: 2048)
-        let handle = makeReadHandle(Data((oversized + "\n").utf8))
-        defer { try? handle.close() }
-
-        XCTAssertThrowsError(try buffer.readMessage(from: handle)) { error in
-            guard case AutomationError.operationFailed(let message) = error else {
-                return XCTFail("Expected operationFailed, got \(error)")
-            }
-            XCTAssertTrue(
-                message.contains("exceeds maximum allowed size"),
-                "Guard message missing size hint: \(message)"
-            )
-        }
-        // The production guard is 50 MB; the injected limit above only shrinks it.
-        XCTAssertEqual(MCPStreamBuffer.maxMessageSize, 50 * 1024 * 1024)
-    }
-
-    func testReadMessageRejectsInvalidContentLength() throws {
-        var buffer = MCPStreamBuffer()
-        let handle = makeReadHandle(Data("Content-Length: nope\r\n\r\n".utf8))
-        defer { try? handle.close() }
-
-        XCTAssertThrowsError(try buffer.readMessage(from: handle)) { error in
-            guard case AutomationError.operationFailed(let message) = error else {
-                return XCTFail("Expected operationFailed, got \(error)")
-            }
-            XCTAssertEqual(message, "Invalid Content-Length header.")
-        }
-    }
-
-    func testReadMessageRejectsOversizedContentLength() throws {
-        var buffer = MCPStreamBuffer(maxLineSize: 1024)
-        let handle = makeReadHandle(Data("Content-Length: 2048\r\n\r\n".utf8))
-        defer { try? handle.close() }
-
-        XCTAssertThrowsError(try buffer.readMessage(from: handle)) { error in
-            guard case AutomationError.operationFailed(let message) = error else {
-                return XCTFail("Expected operationFailed, got \(error)")
-            }
-            XCTAssertTrue(message.contains("2048"), "Expected rejected payload size in: \(message)")
-        }
-    }
-
-    func testReadMessageRejectsTruncatedContentLengthPayload() throws {
-        var buffer = MCPStreamBuffer()
-        let handle = makeReadHandle(Data("Content-Length: 5\r\n\r\nabc".utf8))
-        defer { try? handle.close() }
-
-        XCTAssertThrowsError(try buffer.readMessage(from: handle)) { error in
-            guard case AutomationError.operationFailed(let message) = error else {
-                return XCTFail("Expected operationFailed, got \(error)")
-            }
-            XCTAssertEqual(message, "Unexpected end of input while reading MCP payload.")
-        }
-    }
-}
-
-extension MCPServerTests {
     // MARK: - Permission Gate Tests (Issue #85)
-
     func testSetPolicyGrantedPermissionsRestrictsAndGetPolicyRoundTrips() async throws {
         let setResult = try await server.dispatch(method: "tools/call", params: [
             "name": "set_policy",
@@ -416,7 +272,7 @@ extension MCPServerTests {
 
     func testPermissionDeniedRefusalPayloadCarriesStableCode() {
         let message = "Permission denied: the 'capture' permission is required for snapshot."
-        let payload = MCPServer.refusalPayload(
+        let payload = SymOperateMCP.MCPServer.refusalPayload(
             code: AutomationError.permissionDenied(message).code,
             message: message
         )
@@ -426,5 +282,107 @@ extension MCPServerTests {
         let refusal = structured?["refusal"] as? [String: Any]
         XCTAssertEqual(refusal?["code"] as? String, "destructive_control_refused")
         XCTAssertEqual(refusal?["message"] as? String, message)
+    }
+}
+
+extension MCPServerTests {
+    // MARK: - Wire Integration Tests (migration #97)
+
+    /// Runs `server` over an in-memory pipe pair, feeding it `requests`
+    /// (newline-delimited JSON-RPC) and returning every response line parsed
+    /// as a JSON object. Exercises the real transport + dispatch path that
+    /// `symoperate serve` uses, not just the in-process `dispatch` seam.
+    private func runWire(server: SymOperateMCP.MCPServer, requests: [String]) async throws -> [[String: Any]] {
+        let input = Pipe()
+        let output = Pipe()
+        let transport = MCPStdioTransport(input: input.fileHandleForReading, output: output.fileHandleForWriting)
+        let task = Task {
+            try await server.run(transport: transport)
+        }
+        for request in requests {
+            input.fileHandleForWriting.write(Data((request + "\n").utf8))
+        }
+        input.fileHandleForWriting.closeFile()
+        try await task.value
+        output.fileHandleForWriting.closeFile()
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        return data.split(separator: 0x0A).compactMap { line in
+            try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any]
+        }
+    }
+
+    func testWireInitializeEchoesRequestedProtocolVersion() async throws {
+        let responses = try await runWire(server: server, requests: [
+            #"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05"}}"#,
+        ])
+        XCTAssertEqual(responses.count, 1)
+        let result = responses[0]["result"] as? [String: Any]
+        XCTAssertEqual(result?["protocolVersion"] as? String, "2024-11-05")
+        let info = result?["serverInfo"] as? [String: Any]
+        XCTAssertEqual(info?["name"] as? String, "symoperate")
+        XCTAssertEqual(info?["version"] as? String, SymOperateVersion.current)
+    }
+
+    func testWireToolsListReturnsAllTools() async throws {
+        let responses = try await runWire(server: server, requests: [
+            #"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#,
+        ])
+        let tools = (responses[0]["result"] as? [String: Any])?["tools"] as? [[String: Any]]
+        XCTAssertEqual(tools?.count, 20)
+    }
+
+    func testWireToolsCallKeepsNumericStructuredContent() async throws {
+        let responses = try await runWire(server: server, requests: [
+            #"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_displays","arguments":{}}}"#,
+        ])
+        let result = responses[0]["result"] as? [String: Any]
+        XCTAssertEqual(result?["isError"] as? Bool, false)
+        let structured = result?["structuredContent"] as? [[String: Any]]
+        let first = structured?.first
+        XCTAssertNotNil(first, "Expected at least one display in structuredContent")
+        // Regression (migration #97): the Any → MCPJSONValue bridge must not
+        // turn numeric values into booleans (displayID 1 → true, bounds 0 → false).
+        // Note: `is Bool` cannot be used here — NSNumber(1) itself bridges to
+        // Bool in Swift; CF type identity is the reliable discrimination.
+        let displayID = first?["displayID"] as? NSNumber
+        XCTAssertNotNil(displayID)
+        XCTAssertFalse(CFGetTypeID(displayID!) == CFBooleanGetTypeID(), "displayID must stay numeric, got \(String(describing: displayID))")
+        XCTAssertEqual(displayID?.intValue, 1)
+        let bounds = first?["bounds"] as? [String: Any]
+        let boundsX = bounds?["x"] as? NSNumber
+        XCTAssertNotNil(boundsX)
+        XCTAssertFalse(CFGetTypeID(boundsX!) == CFBooleanGetTypeID(), "bounds.x must stay numeric, got \(String(describing: boundsX))")
+        XCTAssertEqual(boundsX?.intValue, 0)
+    }
+
+    func testWirePermissionDeniedReturnsRefusalResult() async throws {
+        let responses = try await runWire(server: server, requests: [
+            #"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"set_policy","arguments":{"granted_permissions":["input"]}}}"#,
+            #"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"snapshot","arguments":{}}}"#,
+        ])
+        XCTAssertEqual(responses.count, 2)
+        let result = responses[1]["result"] as? [String: Any]
+        XCTAssertEqual(result?["isError"] as? Bool, false)
+        let structured = result?["structuredContent"] as? [String: Any]
+        XCTAssertEqual(structured?["status"] as? String, "refused")
+        XCTAssertNotNil((structured?["refusal"] as? [String: Any])?["code"])
+    }
+
+    func testWireNotificationGetsNoResponse() async throws {
+        let responses = try await runWire(server: server, requests: [
+            #"{"jsonrpc":"2.0","method":"notifications/initialized"}"#,
+            #"{"jsonrpc":"2.0","id":1,"method":"ping"}"#,
+        ])
+        XCTAssertEqual(responses.count, 1, "Notifications must not produce a response")
+        XCTAssertEqual((responses[0]["id"] as? NSNumber)?.intValue, 1)
+    }
+
+    func testWireUnknownMethodReturnsMethodNotFound() async throws {
+        let responses = try await runWire(server: server, requests: [
+            #"{"jsonrpc":"2.0","id":1,"method":"invalid/method"}"#,
+        ])
+        let error = responses[0]["error"] as? [String: Any]
+        XCTAssertEqual(error?["code"] as? Int, -32601)
+        XCTAssertTrue((error?["message"] as? String)?.contains("invalid/method") ?? false)
     }
 }
