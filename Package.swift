@@ -12,7 +12,7 @@ let package = Package(
         .executable(name: "symoperate", targets: ["symoperate"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/danieljustus/symaira-appkit.git", exact: "0.6.1"),
+        .package(url: "https://github.com/danieljustus/symaira-appkit.git", exact: "0.8.0"),
     ],
     targets: [
         .target(
@@ -27,7 +27,10 @@ let package = Package(
         ),
         .target(
             name: "SymOperateMCP",
-            dependencies: ["SymOperateCore"]
+            dependencies: [
+                "SymOperateCore",
+                .product(name: "SymairaMCP", package: "symaira-appkit"),
+            ]
         ),
         .executableTarget(
             name: "symoperate",
@@ -35,7 +38,12 @@ let package = Package(
         ),
         .testTarget(
             name: "SymOperateCoreTests",
-            dependencies: ["SymOperateCore", "SymOperateMCP", .product(name: "SymairaUpdateCheck", package: "symaira-appkit")]
+            dependencies: [
+                "SymOperateCore",
+                "SymOperateMCP",
+                .product(name: "SymairaUpdateCheck", package: "symaira-appkit"),
+                .product(name: "SymairaMCP", package: "symaira-appkit"),
+            ]
         ),
         .testTarget(
             name: "SymOperateSmokeTests",
