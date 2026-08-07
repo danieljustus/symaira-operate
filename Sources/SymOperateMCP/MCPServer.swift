@@ -24,7 +24,9 @@ import SymairaMCP
 /// The wire payload shapes are intentionally byte-compatible with the
 /// previous implementation (same `tools/list` schemas including `oneOf` /
 /// `anyOf` / `enum` constraints, same `structuredContent` extension key on
-/// `tools/call` results). `SymairaMCP`'s generic `MCPJSONValue` result type
+/// `tools/call` results, and genuine `AutomationError` faults returned as
+/// JSON-RPC `-32603` errors carrying the machine-readable classification in
+/// `error.data.code`). `SymairaMCP`'s generic `MCPJSONValue` result type
 /// makes this possible without constraining the tool metadata to the
 /// module's minimal `MCPTool` schema shape.
 public final class MCPServer: @unchecked Sendable {
@@ -90,8 +92,11 @@ public final class MCPServer: @unchecked Sendable {
                         // refusal.
                         return Self.jsonValue(Self.refusalPayload(code: error.code, message: error.localizedDescription))
                     }
-                    // Genuine faults surface as JSON-RPC internal errors.
-                    throw MCPError(error.localizedDescription)
+                    // Genuine faults surface as JSON-RPC internal errors,
+                    // carrying the stable machine-readable classification in
+                    // `error.data.code` (same contract as before the
+                    // SymairaMCP migration).
+                    throw MCPError(error.localizedDescription, data: .object(["code": .string(error.code)]))
                 } catch {
                     throw MCPError(error.localizedDescription)
                 }
