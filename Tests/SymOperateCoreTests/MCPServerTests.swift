@@ -377,6 +377,21 @@ extension MCPServerTests {
         XCTAssertEqual((responses[0]["id"] as? NSNumber)?.intValue, 1)
     }
 
+    func testWireGenuineFaultCarriesErrorDataCode() async throws {
+        // Regression (issue #101): after the SymairaMCP migration the error
+        // path dropped the machine-readable classification. A genuine
+        // AutomationError must surface as a JSON-RPC -32603 error whose
+        // `error.data.code` equals the AutomationError code.
+        let responses = try await runWire(server: server, requests: [
+            #"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"type_text","arguments":{"text":""}}}"#,
+        ])
+        XCTAssertEqual(responses.count, 1)
+        let error = responses[0]["error"] as? [String: Any]
+        XCTAssertEqual(error?["code"] as? Int, -32603)
+        let data = error?["data"] as? [String: Any]
+        XCTAssertEqual(data?["code"] as? String, "invalid_argument")
+    }
+
     func testWireUnknownMethodReturnsMethodNotFound() async throws {
         let responses = try await runWire(server: server, requests: [
             #"{"jsonrpc":"2.0","id":1,"method":"invalid/method"}"#,
