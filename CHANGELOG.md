@@ -5,6 +5,17 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.0]
+
+### Added
+- MCP server migrated to symaira-appkit's `SymairaMCP` module (#97, #98).
+
+### Fixed
+- Machine-readable `error.data.code` restored on genuine `AutomationError` faults (#103).
+
+### Dependencies
+- Bump actions/download-artifact to v8 (#99).
+
 ## [0.5.0]
 
 ### Added
