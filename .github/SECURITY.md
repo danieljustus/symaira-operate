@@ -45,4 +45,4 @@ We aim to acknowledge reports within 48 hours and release a fix within 14 days f
 - The Accessibility and Screen Recording permissions belong to the host process that launches `symoperate`, not to `symoperate` itself.
 - Element-based actions refuse destructive controls and `AXSecureTextField`.
 
-See [AGENTS.md](AGENTS.md) and [docs/architecture.md](docs/architecture.md) for the current trust model and safety guards.
+See [AGENTS.md](../AGENTS.md) and [docs/architecture.md](../docs/architecture.md) for the current trust model and safety guards.

@@ -21,7 +21,8 @@ Part of the [Symaira](../ECOSYSTEM.md) family, and the agent-native sibling of
 tune = thermals/brightness/power.**
 
 > **Status: v0.6.0.** Working native implementation (rebranded from the author's
-> `mac-operator` prototype), 165 tests passing.
+> `mac-operator` prototype), covered by unit tests across every target
+> (`swift test`).
 
 ## Why symoperate?
 
