@@ -74,3 +74,21 @@ public struct ProbeResult: Codable, Sendable {
         self.message = message
     }
 }
+
+public enum DoctorAdvice {
+    /// Builds the doctor recommendation for a failed screenshot probe.
+    ///
+    /// A `.unavailable` capture failure means ScreenCaptureKit exposes no
+    /// capturable display (headless/clamshell Mac, or a stale TCC identity
+    /// after the binary was re-signed). That state needs actionable environment
+    /// advice, not the raw capture error; every other failure keeps its
+    /// localized message.
+    public static func screenshotProbeRecommendation(for error: AutomationError) -> String {
+        switch error {
+        case let .unavailable(message):
+            return "\(message) ScreenCaptureKit exposes no capturable display: connect a display to this Mac, or if the binary was recently re-signed, re-grant Screen Recording to the current binary identity (System Settings > Privacy & Security > Screen Recording)."
+        default:
+            return error.localizedDescription
+        }
+    }
+}

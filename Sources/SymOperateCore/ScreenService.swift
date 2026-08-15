@@ -145,7 +145,7 @@ public final class ScreenService: ScreenServiceProtocol {
                 let content = try await SCShareableContent.current
 
                 guard let display = content.displays.first(where: { $0.displayID == displayID }) else {
-                    throw AutomationError.operationFailed("Display \(displayID) not found in ScreenCaptureKit.")
+                    throw AutomationError.unavailable("Display \(displayID) not found in ScreenCaptureKit.")
                 }
 
                 let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
@@ -199,7 +199,7 @@ public final class ScreenService: ScreenServiceProtocol {
                 }
 
                 guard let display = content.displays.first(where: { $0.displayID == CGMainDisplayID() }) else {
-                    throw AutomationError.operationFailed("Main display not found for window capture.")
+                    throw AutomationError.unavailable("Main display not found for window capture.")
                 }
 
                 let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [window])
@@ -245,7 +245,15 @@ public final class ScreenService: ScreenServiceProtocol {
     /// Detection covers the ScreenCaptureKit `-3801` code, the `com.apple.TCC`
     /// error domain, and localized denial messages (e.g. German
     /// "Benutzer:in hat TCCs für die Aufnahme durch Apps, Fenster, Displays abgelehnt").
+    ///
+    /// Typed `AutomationError`s thrown by the capture paths (display mismatch →
+    /// `.unavailable`, missing window → `.notFound`) are passed through unchanged;
+    /// re-wrapping them as `.operationFailed` would hide the distinct
+    /// environment/not-found states from MCP clients and `doctor`.
     static func classifyCaptureError(_ error: Error, context: String) -> AutomationError {
+        if let automationError = error as? AutomationError {
+            return automationError
+        }
         if Self.isScreenRecordingPermissionDenied(error) {
             return AutomationError.permissionDenied(
                 "Screen Recording permission is denied. Enable it in System Settings > Privacy & Security > Screen Recording."

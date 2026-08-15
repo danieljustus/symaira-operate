@@ -61,4 +61,51 @@ final class ScreenServiceTests: XCTestCase {
         }
         XCTAssertTrue(message.contains("Screen capture failed"))
     }
+
+    // MARK: - Typed error pass-through (issue #108)
+
+    func testTypedUnavailableErrorPassesThroughClassifier() {
+        // Display-mismatch errors thrown by the capture paths are already
+        // classified; the classifier must not re-wrap them as operationFailed.
+        let displayMismatch = AutomationError.unavailable("Display 1 not found in ScreenCaptureKit.")
+        let classified = ScreenService.classifyCaptureError(displayMismatch, context: "Screen capture")
+        guard case .unavailable(let message) = classified else {
+            return XCTFail("Expected .unavailable to pass through, got \(classified)")
+        }
+        XCTAssertEqual(message, "Display 1 not found in ScreenCaptureKit.")
+        XCTAssertEqual(classified.code, "element_not_resolvable")
+    }
+
+    func testTypedNotFoundErrorPassesThroughClassifier() {
+        let windowMissing = AutomationError.notFound("Window 42 not found in ScreenCaptureKit.")
+        let classified = ScreenService.classifyCaptureError(windowMissing, context: "Window capture")
+        guard case .notFound(let message) = classified else {
+            return XCTFail("Expected .notFound to pass through, got \(classified)")
+        }
+        XCTAssertEqual(message, "Window 42 not found in ScreenCaptureKit.")
+    }
+
+    // MARK: - Doctor advice (issue #108)
+
+    func testDoctorAdviceForUnavailableCaptureErrorIsActionable() {
+        let advice = DoctorAdvice.screenshotProbeRecommendation(
+            for: .unavailable("Display 1 not found in ScreenCaptureKit.")
+        )
+        XCTAssertTrue(advice.contains("ScreenCaptureKit"), advice)
+        XCTAssertTrue(advice.contains("display"), advice)
+        XCTAssertTrue(advice.contains("Screen Recording"), advice)
+    }
+
+    func testDoctorAdviceForOtherErrorsReturnsLocalizedMessage() {
+        let denied = AutomationError.permissionDenied("Screen Recording permission is denied. Enable it.")
+        XCTAssertEqual(
+            DoctorAdvice.screenshotProbeRecommendation(for: denied),
+            "Screen Recording permission is denied. Enable it."
+        )
+        let failed = AutomationError.operationFailed("Screen capture failed: stream error")
+        XCTAssertEqual(
+            DoctorAdvice.screenshotProbeRecommendation(for: failed),
+            "Screen capture failed: stream error"
+        )
+    }
 }
