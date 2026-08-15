@@ -20,7 +20,7 @@ Part of the [Symaira](../ECOSYSTEM.md) family, and the agent-native sibling of
 [`symaira-tune`](../symaira-tune) (hardware tuning): **operate = GUI actions,
 tune = thermals/brightness/power.**
 
-> **Status: v0.6.0.** Working native implementation (rebranded from the author's
+> **Status: v0.6.1.** Working native implementation (rebranded from the author's
 > `mac-operator` prototype), covered by unit tests across every target
 > (`swift test`).
 
@@ -122,7 +122,7 @@ $ symoperate doctor
   "recommendations" : [
     "Accessibility permission denied."
   ],
-  "version" : "0.6.0"
+  "version" : "0.6.1"
 }
 ```
 
