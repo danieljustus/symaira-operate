@@ -89,7 +89,16 @@ final class MCPServerTests: XCTestCase {
     }
 
     func testToolsCallSnapshotReturnsContent() async throws {
-        let result = try await server.dispatch(method: "tools/call", params: ["name": "snapshot", "arguments": [:]])
+        let result: [String: Any]
+        do {
+            result = try await server.dispatch(method: "tools/call", params: ["name": "snapshot", "arguments": [:]])
+        } catch let error as AutomationError {
+            if case .operationFailed(let message) = error,
+               message.contains("not found in ScreenCaptureKit") {
+                throw XCTSkip("Host has no ScreenCaptureKit-visible display; snapshot cannot run here.")
+            }
+            throw error
+        }
         let content = result["content"] as? [[String: Any]]
         XCTAssertNotNil(content)
         XCTAssertEqual(content?.first?["type"] as? String, "text")

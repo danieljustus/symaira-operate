@@ -18,6 +18,12 @@ final class SmokeTests: XCTestCase {
         } catch let error as AutomationError {
             if case .permissionDenied = error {
                 XCTAssertTrue(error.localizedDescription.lowercased().contains("screen") || error.localizedDescription.lowercased().contains("recording"))
+            } else if case .operationFailed(let message) = error,
+                      message.contains("not found in ScreenCaptureKit") {
+                // Host with no ScreenCaptureKit-visible display (headless,
+                // clamshell, or a stale TCC identity): CoreGraphics may still
+                // report a display and both permissions may be granted, but
+                // SCK exposes no capturable display, so capture cannot run.
             } else {
                 XCTFail("Unexpected error: \(error.localizedDescription)")
             }
