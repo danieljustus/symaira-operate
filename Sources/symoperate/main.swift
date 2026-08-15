@@ -119,7 +119,7 @@ do {
                 _ = try controller.snapshot()
                 screenshotProbe = ProbeResult(ok: true, message: "Screenshot capture works.")
             } catch let error as AutomationError {
-                screenshotProbe = ProbeResult(ok: false, message: error.localizedDescription)
+                screenshotProbe = ProbeResult(ok: false, message: DoctorAdvice.screenshotProbeRecommendation(for: error))
             } catch {
                 screenshotProbe = ProbeResult(ok: false, message: error.localizedDescription)
             }

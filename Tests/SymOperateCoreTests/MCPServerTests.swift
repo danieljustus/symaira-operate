@@ -93,7 +93,7 @@ final class MCPServerTests: XCTestCase {
         do {
             result = try await server.dispatch(method: "tools/call", params: ["name": "snapshot", "arguments": [:]])
         } catch let error as AutomationError {
-            if case .operationFailed(let message) = error,
+            if case .unavailable(let message) = error,
                message.contains("not found in ScreenCaptureKit") {
                 throw XCTSkip("Host has no ScreenCaptureKit-visible display; snapshot cannot run here.")
             }
