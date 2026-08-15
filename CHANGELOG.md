@@ -5,6 +5,17 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.1]
+
+### Fixed
+- Classify ScreenCaptureKit display-mismatch capture failures as unavailable and provide actionable doctor advice (#109).
+
+### Tests
+- Tolerate hosts with no ScreenCaptureKit-visible display in smoke and MCP tests (#107).
+
+### Documentation
+- Correct SECURITY.md links and remove the hand-counted README test total (#106).
+
 ## [0.6.0]
 
 ### Added
