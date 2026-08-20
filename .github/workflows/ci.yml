@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: '49 5 * * 1'  # weekly full suite including coverage
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -34,6 +36,7 @@ jobs:
         run: swiftlint lint --strict --reporter github-actions-logging
 
   coverage:
+    if: github.event_name != 'pull_request'
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
