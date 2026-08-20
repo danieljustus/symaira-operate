@@ -1,0 +1,167 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Build release binary
+        run: swift build -c release
+
+      - name: Sign binary
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -n "$APPLE_CERTIFICATE" ]; then
+            echo "$APPLE_CERTIFICATE" | base64 --decode > cert.p12
+            security create-keychain -p "" binary.keychain
+            security default-keychain -s binary.keychain
+            security unlock-keychain -p "" binary.keychain
+            security import cert.p12 -k binary.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" binary.keychain
+            codesign --force --sign "Developer ID Application" --keychain binary.keychain --timestamp --options runtime .build/release/symoperate
+          fi
+
+      - name: Create DMG
+        run: |
+          mkdir -p dmg
+          cp .build/release/symoperate dmg/
+          hdiutil create -volname "symoperate" -srcfolder dmg -ov -format UDZO symoperate.dmg
+
+      - name: Sign with Developer ID
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -n "$APPLE_CERTIFICATE" ]; then
+            echo "$APPLE_CERTIFICATE" | base64 --decode > cert.p12
+            security create-keychain -p "" build.keychain
+            security default-keychain -s build.keychain
+            security unlock-keychain -p "" build.keychain
+            security import cert.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" build.keychain
+            codesign --force --sign "Developer ID Application" --keychain build.keychain --timestamp symoperate.dmg
+          fi
+
+      - name: Notarize
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          if [ -n "$APPLE_ID" ]; then
+            xcrun notarytool submit symoperate.dmg \
+              --apple-id "$APPLE_ID" \
+              --team-id "$APPLE_TEAM_ID" \
+              --password "$APPLE_APP_PASSWORD" \
+              --wait
+            xcrun stapler staple symoperate.dmg
+          fi
+
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: symoperate.dmg
+          generate_release_notes: true
+          body: |
+            ## symoperate ${{ steps.version.outputs.version }}
+
+            ### Installation
+
+            **Homebrew (recommended):**
+            ```bash
+            brew install danieljustus/tap/symoperate
+            ```
+
+            **Direct download:** Download `symoperate.dmg` below, open it, and move `symoperate` to `/usr/local/bin/`.
+
+            ### Permissions
+            ```bash
+            symoperate permissions grant accessibility
+            symoperate permissions grant screen
+            symoperate doctor
+            ```
+
+      - name: Verify release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          echo "Verifying release v${VERSION} has DMG asset..."
+          for i in {1..12}; do
+            ASSETS=$(gh release view "v${VERSION}" --repo "${{ github.repository }}" --json assets --jq '.assets[].name')
+            if echo "$ASSETS" | grep -q '^symoperate\.dmg$'; then
+              echo "Found symoperate.dmg in release v${VERSION}"
+              exit 0
+            fi
+            echo "Asset not found yet, waiting 5s (attempt ${i}/12)..."
+            sleep 5
+          done
+          echo "Error: release v${VERSION} was published without symoperate.dmg"
+          exit 1
+
+      - name: Publish Homebrew cask
+        env:
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+        run: |
+          if [ -n "$HOMEBREW_TAP_GITHUB_TOKEN" ]; then
+            DMG_SHA=$(shasum -a 256 symoperate.dmg | awk '{print $1}')
+
+            CASK_CONTENT=$(cat <<CASK_EOF
+          cask "symoperate" do
+            version "${{ steps.version.outputs.version }}"
+            sha256 "${DMG_SHA}"
+
+            url "https://github.com/danieljustus/symaira-operate/releases/download/v#{version}/symoperate.dmg"
+            name "Symoperate"
+            desc "Native macOS desktop-automation MCP server"
+            homepage "https://github.com/danieljustus/symaira-operate"
+
+            depends_on macos: :sequoia
+
+            binary "symoperate"
+
+            zap trash: [
+              "~/Library/Application Support/symoperate",
+              "~/Library/Preferences/com.symaira.operate.plist",
+              "~/Library/Caches/com.symaira.operate",
+            ]
+          end
+          CASK_EOF
+            )
+
+            TAP_DIR=$(mktemp -d)
+            git clone --depth 1 \
+              "https://x-access-token:${HOMEBREW_TAP_GITHUB_TOKEN}@github.com/danieljustus/homebrew-tap.git" \
+              "$TAP_DIR"
+            echo "$CASK_CONTENT" > "$TAP_DIR/Casks/symoperate.rb"
+            cd "$TAP_DIR"
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add Casks/symoperate.rb
+            git diff --cached --quiet || \
+              (git commit -m "Update symoperate to ${{ steps.version.outputs.version }}" && git push)
+          else
+            echo "No HOMEBREW_TAP_GITHUB_TOKEN — skipping cask publish."
+          fi

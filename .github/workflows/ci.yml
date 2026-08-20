@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '49 5 * * 1'  # weekly full suite including coverage
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Swift version
+        run: swift --version
+      - name: Build
+        run: swift build -v
+      - name: Test
+        run: swift test -v
+
+  swiftlint:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install SwiftLint
+        run: brew install swiftlint
+      - name: Lint
+        run: swiftlint lint --strict --reporter github-actions-logging
+
+  coverage:
+    if: github.event_name != 'pull_request'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Swift version
+        run: swift --version
+      - name: Run tests with coverage
+        run: make coverage
+      - name: Upload coverage data
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-data
+          path: .build/coverage.json
+          retention-days: 7
+          if-no-files-found: error
+
+  publish-coverage-data:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: coverage
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Download coverage data
+        uses: actions/download-artifact@v8
+        with:
+          name: coverage-data
+      - name: Generate badge
+        run: python3 .github/scripts/generate-badge.py < coverage.json
+      - name: Publish to coverage-data branch
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git fetch origin coverage-data 2>/dev/null || true
+          if git show-ref --verify refs/heads/coverage-data 2>/dev/null; then
+            git checkout coverage-data
+          else
+            git checkout --orphan coverage-data
+          fi
+          git add -f coverage.json badge.json badge.svg
+          git commit --allow-empty -m "chore: update coverage data [skip ci]"
+          git push origin coverage-data --force
